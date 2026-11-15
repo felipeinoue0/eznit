@@ -89,6 +89,14 @@ type serverView struct {
 	// is refused for the same reason it is refused while the server runs.
 	preparing bool
 
+	// stepDone is closed when the database step has finished its work on the
+	// view, the dialog included. It is not a second copy of preparing: that
+	// flag goes false before the dialog is built, so it cannot answer "is the
+	// goroutine still touching widgets" — which is exactly what a test that
+	// presses Start has to wait for, or it quits the app under the step (#328).
+	// It is nil until a step starts, and then it is that step's channel.
+	stepDone chan struct{}
+
 	// prepare is the database step. It is a field so a test can answer for it:
 	// the real one starts containers, and most tests are about the buttons.
 	prepare func(ctx context.Context, dir string, out io.Writer) (serverctl.Result, error)
@@ -1087,11 +1095,20 @@ func (v *serverView) startServer() {
 
 	// Off the UI goroutine: the first run pulls two images and applies the
 	// migrations, and the window has to keep painting while it does.
+	stepDone := make(chan struct{})
+	v.stepDone = stepDone
+
 	go func() {
+		defer close(stepDone)
+
 		result, err := v.prepare(ctx, folder, progress)
 		cancel()
 
-		fyne.Do(func() { v.afterPrepare(result, err, progress) })
+		// AndWait, not Do: the close above then marks the end of the step's
+		// work on the view in every driver, not just the test one that runs
+		// this inline. Nothing follows it here, so the wait costs nothing, and
+		// it is what lets a test quit the app without racing the dialog.
+		fyne.DoAndWait(func() { v.afterPrepare(result, err, progress) })
 	}()
 }
 
