@@ -7,6 +7,9 @@ import (
 	"strings"
 	"testing"
 
+	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/theme"
+
 	"github.com/fiwon123/eznit/internal/config"
 )
 
@@ -88,5 +91,51 @@ func TestLocalBarShowsThisMachine(t *testing.T) {
 
 	if got := u.files.bar.source.Text; !strings.Contains(got, localSource) {
 		t.Errorf("source = %q, want %q", got, localSource)
+	}
+}
+
+// The address field shows a whole address even when the window is dragged to
+// its narrowest. It used to share a row with the "Server" caption and every
+// action, so the field was the leftover of the bar — 203 px at the window's
+// own minimum, which clips a long address (#325).
+func TestAddressFieldShowsAWholeAddress(t *testing.T) {
+	const address = "http://a-very-long-server-name.example.com:4000"
+
+	tabs := []struct {
+		name  string
+		index int
+		bar   func(*ui) *addressBar
+	}{
+		{"files", 0, func(u *ui) *addressBar { return u.files.bar }},
+		{"templates", 1, func(u *ui) *addressBar { return u.templates.bar }},
+	}
+
+	for _, tab := range tabs {
+		t.Run(tab.name, func(t *testing.T) {
+			u := newTestUI(t)
+			u.local = false
+			u.address = apiChoice{url: address, source: "the address you entered on another machine"}
+
+			u.tabs.SelectIndex(tab.index)
+			bar := tab.bar(u)
+			bar.sync()
+
+			u.window.Content().Resize(fyne.NewSize(980, 640))
+			relayout(u.window.Content())
+
+			// The window can be dragged down to what its content needs; that
+			// is the narrowest a person can make it.
+			narrow := u.window.Content().MinSize().Width
+			u.window.Content().Resize(fyne.NewSize(narrow, 640))
+			relayout(u.window.Content())
+
+			need := fyne.MeasureText(bar.entry.Text, theme.TextSize(), fyne.TextStyle{}).Width +
+				2*theme.Padding()
+
+			if got := bar.entry.Size().Width; got < need {
+				t.Errorf("at %.0f px of window the address field is %.0f px wide, needs %.0f for %q",
+					narrow, got, need, bar.entry.Text)
+			}
+		})
 	}
 }
