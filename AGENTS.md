@@ -176,6 +176,14 @@ needs it, and after that a start is only a recreate (the marker requires one).
 An edit to a `Dockerfile`, `web/Dockerfile.dev` or a script one of them `COPY`s
 needs `make dev-build` — `dev-up` and `dev-restart` will not pick it up.
 
+The same staleness has a louder failure mode after a Go pin bump: the image on
+disk carries the old toolchain, Compose starts it, and the API dies with
+`go: go.mod requires go >= X (running go Y; GOTOOLCHAIN=local)` inside the log
+stream. `dev-up` therefore refuses first — `scripts/check-dev-toolchain.sh`
+asks the image what toolchain it carries, compares it with `go.mod`, and names
+`make dev-build`; the dev entrypoint runs the same check so the raw
+`docker compose up dev web-dev db migrate` path reports it too.
+
 The services are behind the `dev` Compose profile, so plain
 `docker compose up` is the **product**, not the loop. The no-Make equivalent is
 `mkdir -p .dev && touch .dev/sandbox-start && docker compose up dev web-dev db migrate` —

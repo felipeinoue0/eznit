@@ -32,7 +32,10 @@ The developer loop is the same split with a different pair of processes:
 and the UI as Vite in `web-dev` (Node 24.22.1), both over the bind mount. The
 same two ports, the same `/v1` proxy, the same `API_SERVE_WEB=false` — so a bug
 that is caused by the two tiers is reproducible in either mode. Neither
-container holds the other's toolchain, and neither needs one on the host.
+container holds the other's toolchain, and neither needs one on the host. A
+stale sandbox image is refused rather than started: `dev-up` and the dev
+entrypoint compare the image's Go with `go.mod` via
+`scripts/check-dev-toolchain.sh`, because the loop never rebuilds on its own.
 
 The API's router is built by `internal/platform/api` and mounted by
 `internal/server`, which `eznit serve` runs: one binary is the client and the

@@ -17,10 +17,11 @@ import (
 
 // loginCard is the size of the sign-in card. It is fixed rather than fitted so
 // the form does not stretch across a wide window; the card keeps its own
-// minimum, and a test asserts both modes fit inside it.
+// minimum, and a test asserts both modes fit inside it — and inside the 600 px
+// the tab has at the window's default 980x640.
 const (
 	loginWidth  float32 = 440
-	loginHeight float32 = 560
+	loginHeight float32 = 590
 )
 
 // loginView is the sign-in and account-creation form. It is one form with a
@@ -33,6 +34,7 @@ type loginView struct {
 	email   *widget.Entry
 	pass    *widget.Entry
 	confirm *widget.Entry
+	hint    *widget.Label
 	status  *widget.Label
 	signup  bool
 	busy    bool
@@ -50,6 +52,7 @@ func newLoginView(u *ui, message string) *loginView {
 		email:   widget.NewEntry(),
 		pass:    widget.NewPasswordEntry(),
 		confirm: widget.NewPasswordEntry(),
+		hint:    signupHint(),
 		status:  widget.NewLabel(message),
 	}
 
@@ -68,6 +71,18 @@ func newLoginView(u *ui, message string) *loginView {
 	}
 
 	return view
+}
+
+// signupHint is what an account needs, in the words the form uses: the API
+// refuses an empty password and a mismatch, and nothing else. Saying it up
+// front is the difference between a form that looks broken and one that asks
+// for exactly what it takes (#324).
+func signupHint() *widget.Label {
+	label := muted("Any email address, and a password typed twice. There is no minimum password length.")
+	label.Alignment = fyne.TextAlignCenter
+	label.Wrapping = fyne.TextWrapWord
+
+	return label
 }
 
 // syncServerField shows this machine's address, or the one typed, according to
@@ -96,7 +111,10 @@ func (l *loginView) content() fyne.CanvasObject {
 		fyne.TextAlignCenter, fyne.TextStyle{})
 	subtitle.Selectable = true
 
-	serverRow := container.NewBorder(nil, nil, l.local.row, nil, l.api)
+	// The address takes the card's width and the local choice sits under it:
+	// side by side inside a 440 px card the checkbox left the field about
+	// 170 px, which clips almost every address (#325).
+	serverRow := container.NewVBox(l.api, l.local.row)
 
 	rows := []formRow{
 		{caption: "Server", input: serverRow},
@@ -117,16 +135,23 @@ func (l *loginView) content() fyne.CanvasObject {
 	l.status.Wrapping = fyne.TextWrapWord
 	l.status.Selectable = true
 
-	l.card = container.NewPadded(container.NewVBox(
+	body := []fyne.CanvasObject{
 		container.NewCenter(logo),
 		title,
 		subtitle,
 		widget.NewSeparator(),
 		formRows(rows...),
-		submit,
-		container.NewCenter(mode),
-		l.status,
-	))
+	}
+
+	// What an account needs, said before the form asks for it: the server
+	// refuses nothing a person could not have known in advance (#324).
+	if l.signup {
+		body = append(body, l.hint)
+	}
+
+	body = append(body, submit, container.NewCenter(mode), l.status)
+
+	l.card = container.NewPadded(container.NewVBox(body...))
 
 	// One primary action on the page, the width of the card, and the mode
 	// switch under it: a form with one way forward is a form a person finishes.
@@ -223,10 +248,15 @@ func (l *loginView) submit() {
 
 		var token string
 		var err error
+		// signedUp is what the follow-up failure means: signup answered OK, so
+		// the address is either new or taken, and the login that follows is
+		// the only step that can refuse.
+		signedUp := false
 
 		if signup {
 			err = client.Signup(email, password, confirm)
 			if err == nil {
+				signedUp = true
 				token, err = client.Login(email, password)
 			}
 		} else {
@@ -237,6 +267,12 @@ func (l *loginView) submit() {
 			l.busy = false
 
 			if err != nil {
+				if signedUp {
+					l.setStatus(signupNotSignedIn)
+
+					return
+				}
+
 				l.setStatus(messageOf(err))
 				return
 			}
@@ -259,6 +295,14 @@ func (l *loginView) submit() {
 		})
 	}()
 }
+
+// signupNotSignedIn is what a failed sign-in after a signup says. The API
+// answers "user created!" for an address that already has an account — on
+// purpose, so signup cannot be used to discover one — and then the login with
+// the password just typed is what fails. "invalid credentials" is true and
+// useless; this says what to do without naming which of the two cases it is.
+const signupNotSignedIn = "The signup went through, but the sign-in did not. " +
+	"If this address already has an account, log in with that account's password instead."
 
 // messageOf is the one line a person needs: the host's message when there is
 // one, the error otherwise.

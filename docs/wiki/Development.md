@@ -68,6 +68,12 @@ images the first time they are needed. An edit to a `Dockerfile`,
 cannot pick up by itself — `make dev-build` rebuilds both images, and
 `make dev-restart` is `dev-down` followed by `dev-up`.
 
+A stale image fails loudly after a Go pin bump, so `dev-up` checks it before
+starting anything: `scripts/check-dev-toolchain.sh` compares the toolchain in the
+image with the `go` directive in `go.mod` and refuses an older one with
+`make dev-build` as the repair. The dev entrypoint runs the same check, so the
+no-Make `docker compose up dev web-dev db migrate` path reports it too.
+
 | Role | Where | Port |
 | --- | --- | --- |
 | Frontend (the app) | `web-dev` service, Vite | **5173** |

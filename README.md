@@ -68,6 +68,12 @@ The core commands prompt for what they need. `template init` is the offline
 path: it writes a starter into a folder with no server and no account. Full
 flags: [CLI Reference](https://github.com/fiwon123/eznit/wiki/CLI-Reference).
 
+A **template is a folder** — `template publish` sends the whole folder to the
+catalogue. Sharing a file (`eznit share`, or **Share** on the window's Files
+tab) only makes that one file downloadable; it does not add anything to
+Templates. Publishing is a CLI step, so press **Refresh** on the window's
+Templates tab after publishing.
+
 ### 🌐 Web UI
 
 | Dark | Light |

@@ -285,7 +285,7 @@ func (v *templatesView) reload() {
 			v.updateActions()
 
 			if len(items) == 0 {
-				v.setStatus("No template matches. Publish one with `eznit template publish`, then Refresh.", statusOK)
+				v.setStatus("No template matches. A shared file is not a template: publish a folder with `eznit template publish ./folder`, then Refresh.", statusOK)
 				return
 			}
 
