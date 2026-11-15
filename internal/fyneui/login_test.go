@@ -145,6 +145,13 @@ func TestLoginCardFitsBothModes(t *testing.T) {
 				t.Errorf("the card needs %.0fx%.0f but its cell is %.0fx%.0f",
 					size.Width, size.Height, loginWidth, loginHeight)
 			}
+
+			// The cell has to fit the tab as well, or the window clips the card
+			// and not one of its own rows.
+			if room := view.ui.tabs.Items[0].Content.Size(); size.Height > room.Height {
+				t.Errorf("the card needs %.0f px of height but the tab gives it %.0f",
+					size.Height, room.Height)
+			}
 		})
 	}
 }

@@ -17,10 +17,11 @@ import (
 
 // loginCard is the size of the sign-in card. It is fixed rather than fitted so
 // the form does not stretch across a wide window; the card keeps its own
-// minimum, and a test asserts both modes fit inside it.
+// minimum, and a test asserts both modes fit inside it — and inside the 600 px
+// the tab has at the window's default 980x640.
 const (
 	loginWidth  float32 = 440
-	loginHeight float32 = 560
+	loginHeight float32 = 590
 )
 
 // loginView is the sign-in and account-creation form. It is one form with a
