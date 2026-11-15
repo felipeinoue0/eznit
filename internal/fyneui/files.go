@@ -500,7 +500,7 @@ func (v *filesView) toggleShare() {
 	}
 
 	dialog.ShowConfirm("Share "+file.Name,
-		"Anyone on this instance will be able to download it.",
+		"Anyone on this instance will be able to download it.\n\nThis shares one file. It does not publish a template: a template is a whole folder, published with `eznit template publish`.",
 		func(confirmed bool) {
 			if confirmed {
 				apply(true)

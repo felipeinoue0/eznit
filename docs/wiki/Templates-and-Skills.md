@@ -38,6 +38,35 @@ my-setup/
 Files are written relative to the target folder; `..` and absolute paths are
 refused. A file marked executable is written with mode `0755` when applied.
 
+## 🤔 A shared file is not a template
+
+The Files tab and the Templates tab keep different things, and sharing does not
+move a file between them:
+
+| | Sharing a file | Publishing a template |
+| --- | --- | --- |
+| Covers | one file | a whole folder |
+| How | **Share** on the Files tab, or `eznit share` | `eznit template publish ./folder` |
+| Does | makes that one file downloadable by anyone on the instance | adds the folder to the catalogue with a name, a kind and its `{{variables}}` |
+| In the catalogue | no | yes |
+
+So a shared file never appears in the Templates tab, and no kind filter can
+make it appear: the filter lists **template kinds** (`opencode`, `codex`,
+`copilot`, `cursor`, `windsurf`, `generic`, `bash`, `zsh`, `fish`,
+`powershell`), and **All kinds** means "no filter". It is not a list of your
+files.
+
+To publish one, point the command at the folder and answer its prompts:
+
+```sh
+eznit template init --kind opencode --target ./demo   # a starter, no server needed
+eznit login
+eznit template publish ./demo --public
+```
+
+Then press **Refresh** on the window's Templates tab. The window browses, shows,
+exports and applies templates; publishing is a CLI step.
+
 ## 📤 Publish, list, show, apply
 
 ```sh
