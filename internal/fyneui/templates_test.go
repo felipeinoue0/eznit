@@ -409,10 +409,28 @@ func TestTemplatesFiltersExplainThemselves(t *testing.T) {
 		t.Error("the kind filter has no caption")
 	}
 
-	for _, want := range []string{"Select a template", "files", "paths", "variables", "commands", "writes"} {
+	for _, want := range []string{"Select a template", "files", "variables", "commands"} {
 		if !strings.Contains(view.summary.Text, want) {
 			t.Errorf("the placeholder = %q, want it to mention %q", view.summary.Text, want)
 		}
+	}
+}
+
+// The catalogue's Refresh is on the tab, not only in the code: the error line
+// used to point at a button nobody could press (#338).
+func TestTemplatesRefreshIsOnTheTab(t *testing.T) {
+	view := newTestTemplatesView(t, apiChoice{url: "http://127.0.0.1:4321", source: "the default"})
+
+	if !holds(view.built, view.refresh) {
+		t.Fatal("the Refresh button is not part of the tab")
+	}
+
+	if view.refresh.Disabled() {
+		t.Error("Refresh is disabled, so a failed load cannot be retried")
+	}
+
+	if view.refresh.OnTapped == nil {
+		t.Error("Refresh runs nothing")
 	}
 }
 

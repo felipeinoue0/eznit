@@ -21,7 +21,7 @@ func newTestLogin(t *testing.T, signup bool) *loginView {
 
 	u := newTestUI(t)
 
-	view := newLoginView(u, "")
+	view := newLoginView(u, "", statusIdle)
 	view.signup = signup
 	u.setFilesTab(view.content())
 
@@ -111,7 +111,7 @@ func TestLoginServerFieldShowsTheWholeAddress(t *testing.T) {
 func TestLoginStatusIsCentredAndWrapped(t *testing.T) {
 	view := newTestLogin(t, false)
 
-	view.setStatus("The server at http://a-very-long-server-name.example.com:4000 did not answer.")
+	view.setStatus("The server at http://a-very-long-server-name.example.com:4000 did not answer.", statusError)
 
 	if view.status.Alignment != fyne.TextAlignCenter {
 		t.Errorf("status alignment = %v, want centre", view.status.Alignment)
@@ -166,7 +166,7 @@ func TestLoginCardFitsBothModes(t *testing.T) {
 
 		t.Run(name, func(t *testing.T) {
 			view := newTestLogin(t, signup)
-			view.setStatus(long)
+			view.setStatus(long, statusError)
 
 			// The window lays the card out before it is measured; do what a
 			// window does.
@@ -233,9 +233,10 @@ func TestLoginExplainsAFailedSignInAfterSignup(t *testing.T) {
 	}
 }
 
-// A plain log-in failure keeps the server's own message: the tailored line is
-// for the signup path, where the password that failed is the one just typed.
-func TestLoginKeepsTheServerMessageForAPlainLogin(t *testing.T) {
+// A plain log-in failure is named plainly: the server's "invalid credentials"
+// is the API's word, not one a person reads, and it is the same either way
+// (#337).
+func TestLoginNamesAWrongPairPlainly(t *testing.T) {
 	server, seen := accountServer(t, http.StatusOK, http.StatusUnauthorized)
 
 	view := newTestLogin(t, false)
@@ -245,8 +246,38 @@ func TestLoginKeepsTheServerMessageForAPlainLogin(t *testing.T) {
 		t.Fatalf("the form called signup %d and login %d times, want only a login", seen[0], seen[1])
 	}
 
-	if view.status.Text != "invalid credentials" {
-		t.Errorf("status = %q, want the server's message", view.status.Text)
+	if view.status.Text != "Wrong email or password." {
+		t.Errorf("status = %q, want the one line a refused pair gets", view.status.Text)
+	}
+
+	if view.status.Importance != widget.DangerImportance {
+		t.Errorf("status importance = %v, want the error colour", view.status.Importance)
+	}
+}
+
+// A wrong answer is drawn in red, so it is visible before it is read. The card
+// used to say everything in the same grey (#337).
+func TestLoginErrorsAreRed(t *testing.T) {
+	view := newTestLogin(t, true)
+
+	view.email.SetText("someone@example.test")
+	view.pass.SetText("one")
+	view.confirm.SetText("another")
+	view.submit()
+
+	if got := view.status.Text; got != "Passwords do not match." {
+		t.Errorf("status = %q, want the mismatch named in one line", got)
+	}
+
+	if view.status.Importance != widget.DangerImportance {
+		t.Errorf("status importance = %v, want the error colour", view.status.Importance)
+	}
+
+	// A message that is not a failure is ordinary text again.
+	view.setStatus("Talking to http://127.0.0.1:4000…", statusPending)
+
+	if view.status.Importance == widget.DangerImportance {
+		t.Error("the status is still red for a message that is not a failure")
 	}
 }
 

@@ -6,11 +6,29 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/widget"
 )
 
 // statusDotSize is the diameter of the dot that colours a message. It is a
 // shape, not text, so it does not scale with the font.
 const statusDotSize float32 = 10
+
+// statusImportance is a status kind as a label's importance: an error is drawn
+// in the theme's error colour, a warning in its warning colour, and anything
+// else as ordinary text.
+//
+// The dot beside a message is one signal; the words themselves are the other,
+// and a ten-pixel dot is easy to miss (#337).
+func statusImportance(kind statusKind) widget.Importance {
+	switch kind {
+	case statusError:
+		return widget.DangerImportance
+	case statusWarn:
+		return widget.WarningImportance
+	default:
+		return widget.MediumImportance
+	}
+}
 
 // dotCell puts the status dot in the middle of the height it is given.
 //
