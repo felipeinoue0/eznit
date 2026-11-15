@@ -43,6 +43,14 @@ export function messageOf(cause: unknown): string {
   return String(cause);
 }
 
+// refused reports whether the API refused the token. It is the one failure a
+// page cannot fix by saying so — the request arrived and was judged, so the
+// session is over and the login page is where the reader goes (#339). Every
+// other failure is a sentence under the form.
+export function refused(cause: unknown): boolean {
+  return cause instanceof ApiError && cause.status === 401;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const headers = new Headers(init?.headers);
   headers.set("Accept", "application/json");
