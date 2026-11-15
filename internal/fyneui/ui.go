@@ -333,7 +333,12 @@ func (u *ui) showLoginWith(message string, kind statusKind) {
 // showUnreachable puts the Files tab's "cannot reach" panel in place. The
 // session is kept: a server that is not there has said nothing about the token.
 func (u *ui) showUnreachable(address string, cause error) {
-	u.setFilesTab(u.files.unreachableContent(address, cause))
+	content := u.files.unreachableContent(address, cause)
+	u.setFilesTab(content)
+
+	// The panel's card is measured before it has a width, and a sentence that
+	// wraps is taller than one line: lay it out again now that it has one.
+	relayout(content)
 }
 
 // setFilesTab replaces the first tab's content. The tab itself stays, so the
@@ -363,6 +368,10 @@ func (u *ui) forgetSession(message string) {
 	}
 
 	u.client.Token = ""
+
+	if u.files != nil {
+		u.files.forget()
+	}
 
 	if u.templates != nil {
 		u.templates.forget()

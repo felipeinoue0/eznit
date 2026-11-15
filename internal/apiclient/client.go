@@ -135,7 +135,7 @@ func (c *Client) Health() error {
 
 	response, err := c.HTTP.Do(request)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrUnreachable, err)
+		return fmt.Errorf("%w: %w", ErrUnreachable, err)
 	}
 	defer response.Body.Close()
 
@@ -246,7 +246,7 @@ func (c *Client) DownloadFile(id string, dest string) (string, error) {
 
 	response, err := c.HTTP.Do(request)
 	if err != nil {
-		return "", fmt.Errorf("%w: %v", ErrUnreachable, err)
+		return "", fmt.Errorf("%w: %w", ErrUnreachable, err)
 	}
 	defer response.Body.Close()
 
@@ -341,7 +341,7 @@ func (c *Client) do(method string, path string, body io.Reader, out any) error {
 func (c *Client) send(request *http.Request, out any) error {
 	response, err := c.HTTP.Do(request)
 	if err != nil {
-		return fmt.Errorf("%w: %v", ErrUnreachable, err)
+		return fmt.Errorf("%w: %w", ErrUnreachable, err)
 	}
 	defer response.Body.Close()
 

@@ -3,6 +3,7 @@
 package fyneui
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -12,6 +13,8 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+
+	"github.com/fiwon123/eznit/internal/apiclient"
 )
 
 // newTestLogin builds the sign-in form in the Files tab, which is where it
@@ -278,6 +281,46 @@ func TestLoginErrorsAreRed(t *testing.T) {
 
 	if view.status.Importance == widget.DangerImportance {
 		t.Error("the status is still red for a message that is not a failure")
+	}
+}
+
+// An instance that cannot be reached is named by its address: the dial error
+// behind it is not a sentence a person reads (#337).
+func TestLoginNamesAnUnreachableServer(t *testing.T) {
+	err := fmt.Errorf("%w: dial tcp 127.0.0.1:4000: connect: connection refused", apiclient.ErrUnreachable)
+
+	if got := loginMessage("http://127.0.0.1:4000", err); got != "Cannot reach http://127.0.0.1:4000." {
+		t.Errorf("loginMessage() = %q, want the address named in one line", got)
+	}
+}
+
+// A signup followed by a server that went away is not "that email already has
+// an account": the tailored line is for a refused pair, and anything else said
+// about the account would be a guess (#337).
+func TestLoginAfterSignupSaysWhatWentWrong(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		switch r.URL.Path {
+		case "/v1/signup":
+			_, _ = w.Write([]byte(`{"status_code":200,"message":"user created!"}`))
+		case "/v1/login":
+			w.WriteHeader(http.StatusServiceUnavailable)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	view := newTestLogin(t, true)
+	fillAndSubmit(t, view, server)
+
+	if strings.Contains(view.status.Text, "already has an account") {
+		t.Errorf("status = %q, want the failure the server gave, not a guess about the account", view.status.Text)
+	}
+
+	if !strings.Contains(view.status.Text, "503") {
+		t.Errorf("status = %q, want the status the server answered", view.status.Text)
 	}
 }
 

@@ -4,9 +4,12 @@ package fyneui
 
 import (
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
@@ -91,6 +94,8 @@ func TestRefusedSessionReturnsToLogin(t *testing.T) {
 	}
 	u.client.Token = "dead-token"
 
+	library := u.tabs.Items[0].Content
+
 	u.files.failedToLoad("https://eznit.example.com", &apiclient.APIError{Status: 401, Message: "Invalid token"})
 
 	if _, err := config.Value("token"); err == nil {
@@ -101,6 +106,44 @@ func TestRefusedSessionReturnsToLogin(t *testing.T) {
 	}
 	if findButton(u.tabs.Items[0].Content, "Log in") == nil {
 		t.Error("the Files tab does not offer to sign in again")
+	}
+	if u.tabs.Items[0].Content == library {
+		t.Error("the library is still on screen after the session ended")
+	}
+}
+
+// The rule is not applied by hand: a real listing answered with 401 must end
+// the session too, which is the wiring from the client's error to the tab.
+func TestRefusedListingGoesToLogin(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"status_code":401,"error":"Invalid token"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	u := newTestUI(t)
+
+	if err := config.Set("token", "dead-token"); err != nil {
+		t.Fatal(err)
+	}
+
+	u.client = apiclient.New(server.URL)
+	u.client.Token = "dead-token"
+
+	u.files.refresh()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for findButton(u.tabs.Items[0].Content, "Log in") == nil && time.Now().Before(deadline) {
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	if findButton(u.tabs.Items[0].Content, "Log in") == nil {
+		t.Fatal("a refused listing did not bring the login card back")
+	}
+
+	if u.client.Token != "" {
+		t.Errorf("client token = %q, want it cleared", u.client.Token)
 	}
 }
 
@@ -124,12 +167,17 @@ func TestUnreachableServerKeepsTheSession(t *testing.T) {
 		t.Errorf("client token = %q, want it kept", u.client.Token)
 	}
 
-	if findButton(u.tabs.Items[0].Content, "Try again") == nil {
+	content := u.tabs.Items[0].Content
+	if findButton(content, "Try again") == nil {
 		t.Error("the not-connected panel has no Try again")
 	}
 
-	// The panel rebuilds the tab's own bar, so a later sync still lands: a
-	// detached bar would swallow the next Connect.
+	// The bar the panel shows is the one a later sync writes to, and it is in
+	// the tree: a detached bar would swallow every address typed into it.
+	if !holds(content, u.files.bar.entry) {
+		t.Error("the panel's address bar is not the one on screen")
+	}
+
 	u.local = false
 	u.address = apiChoice{url: "http://127.0.0.1:9999", source: "the address you entered"}
 	u.syncAddressBars()

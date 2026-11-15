@@ -205,7 +205,6 @@ func (v *filesView) setStatus(text string, kind statusKind) {
 
 	v.status.Importance = statusImportance(kind)
 	v.status.SetText(text)
-	v.status.Refresh()
 
 	if v.dot != nil {
 		v.dot.FillColor = statusColour(v.ui.app.Settings().ThemeVariant(), kind)
@@ -331,14 +330,25 @@ func (v *filesView) copySelectedDetails() {
 
 // refresh reloads the library. The request runs off the UI goroutine and the
 // widgets are touched only inside fyne.Do.
+//
+// The client is captured before the request: a connect can replace u.client
+// while a listing is in flight, and an answer that arrives for the previous
+// instance must not be applied to the new one — a 401 from the old server would
+// otherwise end a session the new one still honours.
 func (v *filesView) refresh() {
-	address := v.ui.client.BaseURL
+	client := v.ui.client
+	address := client.BaseURL
+
 	v.setStatus("Loading your files from "+address+"…", statusPending)
 
 	go func() {
-		files, err := v.ui.client.ListFiles()
+		files, err := client.ListFiles()
 
 		fyne.Do(func() {
+			if v.ui.client != client {
+				return
+			}
+
 			if err != nil {
 				v.failedToLoad(address, err)
 				return
@@ -381,10 +391,35 @@ func (v *filesView) failedToLoad(address string, err error) {
 
 // unreachableContent is the tab when the server did not answer: the same
 // address bar as the library — so another address can be typed and connected —
-// and the panel that explains the state.
+// the panel that explains the state, and a status line of its own.
+//
+// The status line is the panel's, not the library's: the library's line sits in
+// a container the tab no longer shows, so a Test or a refused address would
+// answer into a label nobody can see.
 func (v *filesView) unreachableContent(address string, cause error) fyne.CanvasObject {
-	return container.NewBorder(v.header(), nil, nil, nil,
-		newUnreachableView(v.ui, address, cause).content())
+	panel := newUnreachableView(v.ui, address, cause)
+
+	v.bar = newAddressBar(v.ui, panel.setStatus, true)
+	header := container.NewVBox(v.bar.content(), widget.NewSeparator())
+
+	return container.NewBorder(header, statusBar(panel.dot, panel.status), nil, nil, panel.content())
+}
+
+// forget drops the rows. They belong to the session that just ended, and the
+// next one may be a different account: a stale table would show the last
+// account's files until the listing returns.
+func (v *filesView) forget() {
+	v.files = nil
+	v.selected = -1
+	v.ready = false
+
+	if v.table == nil {
+		return
+	}
+
+	v.table.UnselectAll()
+	v.table.Refresh()
+	v.updateActions()
 }
 
 func (v *filesView) uploadFile() {

@@ -49,14 +49,49 @@ func TestUnreachablePanelNamesTheAddress(t *testing.T) {
 }
 
 // An answer with a status code is the server saying something the request did
-// not expect, and the panel names the code rather than the dial error.
+// not expect, and the advice depends on which side of 500 it is: a 5xx is worth
+// retrying, a 4xx usually means the address is not an eznit instance.
 func TestUnreachablePanelNamesAnUnexpectedAnswer(t *testing.T) {
+	tests := []struct {
+		name   string
+		status int
+		want   string
+	}{
+		{"a server in trouble", 503, "answered 503. Try again in a moment"},
+		{"a wrong address", 404, "answered 404. Check the address above"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			u := newTestUI(t)
+
+			u.showUnreachable("http://127.0.0.1:4321", &apiclient.APIError{Status: tt.status})
+
+			if got := panelText(u.tabs.Items[0].Content); !strings.Contains(got, tt.want) {
+				t.Errorf("the panel says %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+// The address bar stays usable while the panel is up, and its answers — a Test,
+// a refused address — land in the panel's own line: the library's status line
+// is in a container the tab no longer shows.
+func TestUnreachablePanelAnswersTheAddressBar(t *testing.T) {
 	u := newTestUI(t)
 
-	u.showUnreachable("http://127.0.0.1:4321", &apiclient.APIError{Status: 503, Message: "maintenance"})
+	u.showUnreachable("http://127.0.0.1:4321", fmt.Errorf("%w: no route to host", apiclient.ErrUnreachable))
 
-	if got := panelText(u.tabs.Items[0].Content); !strings.Contains(got, "answered 503") {
-		t.Errorf("the panel says %q, want the status the server answered", got)
+	content := u.tabs.Items[0].Content
+
+	if !holds(content, u.files.bar.entry) {
+		t.Fatal("the panel's address bar is not on screen")
+	}
+
+	u.files.bar.message("No answer from http://127.0.0.1:4321", statusError)
+
+	if got := panelText(content); !strings.Contains(got, "No answer from http://127.0.0.1:4321") {
+		t.Errorf("the panel says %q, want the bar's answer", got)
 	}
 }
 
@@ -71,6 +106,7 @@ func TestUnreachablePanelFitsTheWindow(t *testing.T) {
 				fmt.Errorf("%w: no route to host", apiclient.ErrUnreachable))
 
 			layOut(u.window, size)
+			assertNoTextOverlap(t, u.window.Content())
 			assertTextFits(t, u.window.Content())
 		})
 	}

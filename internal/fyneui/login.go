@@ -194,7 +194,6 @@ func (l *loginView) toggleMode() {
 func (l *loginView) setStatus(text string, kind statusKind) {
 	l.status.Importance = statusImportance(kind)
 	l.status.SetText(text)
-	l.status.Refresh()
 
 	relayout(l.card)
 }
@@ -273,7 +272,12 @@ func (l *loginView) submit() {
 			l.busy = false
 
 			if err != nil {
-				if signedUp {
+				// The tailored line is for a refused pair after a signup —
+				// that is the case the server cannot name. Anything else (a
+				// server that went away between the two calls, a 5xx) gets
+				// its own sentence, because "already has an account" would be
+				// false (#337).
+				if signedUp && apiErrorStatus(err) == http.StatusUnauthorized {
 					l.setStatus(signupNotSignedIn, statusError)
 
 					return
@@ -302,11 +306,12 @@ func (l *loginView) submit() {
 	}()
 }
 
-// signupNotSignedIn is what a failed sign-in after a signup says. The API
+// signupNotSignedIn is what a refused sign-in after a signup says. The API
 // answers "user created!" for an address that already has an account — on
 // purpose, so signup cannot be used to discover one — and then the login with
 // the password just typed is what fails. "invalid credentials" is true and
-// useless; this says what to do without naming which of the two cases it is.
+// useless; this names the likely case and the way out. It is used for a 401
+// only: a signup followed by a server that went away gets its own sentence.
 const signupNotSignedIn = "That email already has an account. Log in with its password."
 
 // loginMessage is the one line a failed sign-in gets. A refused pair is named

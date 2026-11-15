@@ -5,6 +5,7 @@ package fyneui
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"path/filepath"
 	"strings"
 
@@ -267,6 +268,16 @@ func (v *templatesView) reload() {
 				// One sentence, and the button that answers it is on this tab
 				// (#338). The address is named because a wrong one is the
 				// usual cause, and the bar above is where it gets fixed.
+				if apiErrorStatus(err) == http.StatusUnauthorized {
+					// The catalogue asked for this account's own templates, or
+					// the address holds a token the API no longer accepts: the
+					// same rule as the Files tab, and the login card is there.
+					v.setStatus(sessionEnded, statusError)
+					v.ui.forgetSession(sessionEnded)
+
+					return
+				}
+
 				v.setStatus("Cannot load the catalogue from "+address+".", statusError)
 
 				return
@@ -624,7 +635,6 @@ func (v *templatesView) setStatus(text string, kind statusKind) {
 
 	v.status.Importance = statusImportance(kind)
 	v.status.SetText(text)
-	v.status.Refresh()
 
 	if v.dot != nil {
 		v.dot.FillColor = statusColour(v.ui.app.Settings().ThemeVariant(), kind)

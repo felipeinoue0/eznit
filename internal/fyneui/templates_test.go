@@ -5,10 +5,13 @@ package fyneui
 import (
 	"bytes"
 	"encoding/base64"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
@@ -431,6 +434,37 @@ func TestTemplatesRefreshIsOnTheTab(t *testing.T) {
 
 	if view.refresh.OnTapped == nil {
 		t.Error("Refresh runs nothing")
+	}
+}
+
+// A catalogue the API refuses ends the session the same way a refused listing
+// does: the tab says so, and the login card is on the Files tab. Without this
+// the tab would keep offering Refresh against a token that cannot work (#335).
+func TestRefusedCatalogueEndsTheSession(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"status_code":401,"error":"Invalid token"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	u := newTestUI(t)
+	u.client = apiclient.New(server.URL)
+	u.client.Token = "dead-token"
+
+	u.templates.reload()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for findButton(u.tabs.Items[0].Content, "Log in") == nil && time.Now().Before(deadline) {
+		time.Sleep(2 * time.Millisecond)
+	}
+
+	if findButton(u.tabs.Items[0].Content, "Log in") == nil {
+		t.Fatal("a refused catalogue did not bring the login card back")
+	}
+
+	if !strings.Contains(u.templates.status.Text, "session ended") {
+		t.Errorf("the tab says %q, want it to say the session ended", u.templates.status.Text)
 	}
 }
 
