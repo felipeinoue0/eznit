@@ -337,6 +337,12 @@ only `token` — the address, the server folder and the git-host tokens stay —
 drops the catalogue, which is per account. The About tab is the window's
 identity and its update controls; it holds nothing about a session.
 
+A session reaches a request through an **immutable client**: `u.client` is
+replaced (`WithToken`) rather than written, and a worker captures it on the UI
+side before it starts, so a request in flight never reads a token the UI is
+changing — sign-out and connect are writes to the window, not to the client.
+That is what lets the window's suite run under `-race` (see `make fyne_race`).
+
 The Server tab reads the env file of `server_dir` — the folder the window was
 installed into unless another is chosen with **Browse…** or typed into the
 folder field and committed with **Use** — and starts `eznit serve` from it as a
