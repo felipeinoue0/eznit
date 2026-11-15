@@ -11,7 +11,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
@@ -44,6 +43,10 @@ func newTestTemplatesView(t *testing.T, address apiChoice) *templatesView {
 
 	u.templates = newTemplatesView(u)
 	u.window.SetContent(u.templates.content())
+
+	// A catalogue fetch runs on the window's tally; wait for it before the
+	// driver goes away (#333).
+	t.Cleanup(u.settle)
 
 	return u.templates
 }
@@ -454,10 +457,10 @@ func TestRefusedCatalogueEndsTheSession(t *testing.T) {
 
 	u.templates.reload()
 
-	deadline := time.Now().Add(5 * time.Second)
-	for findButton(u.tabs.Items[0].Content, "Log in") == nil && time.Now().Before(deadline) {
-		time.Sleep(2 * time.Millisecond)
-	}
+	// Wait for the answer instead of polling the tree: the poll reads widgets
+	// the worker writes (the test driver runs fyne.Do inline), which was one of
+	// the races #333 recorded.
+	u.settle()
 
 	if findButton(u.tabs.Items[0].Content, "Log in") == nil {
 		t.Fatal("a refused catalogue did not bring the login card back")

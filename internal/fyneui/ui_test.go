@@ -149,6 +149,12 @@ func newTestUI(t *testing.T) *ui {
 	)
 	u.window.SetContent(u.tabs)
 
+	// Settle before the app quits. A request still in flight would otherwise
+	// touch widgets after the driver is gone, and the -race suite would report
+	// it against whichever test happened to run next (#333). Cleanups run last
+	// in, first out, so this runs before the Quit registered above.
+	t.Cleanup(u.settle)
+
 	return u
 }
 

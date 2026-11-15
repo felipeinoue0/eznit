@@ -1098,7 +1098,7 @@ func (v *serverView) startServer() {
 	stepDone := make(chan struct{})
 	v.stepDone = stepDone
 
-	go func() {
+	v.ui.background(func() {
 		defer close(stepDone)
 
 		result, err := v.prepare(ctx, folder, progress)
@@ -1109,7 +1109,7 @@ func (v *serverView) startServer() {
 		// this inline. Nothing follows it here, so the wait costs nothing, and
 		// it is what lets a test quit the app without racing the dialog.
 		fyne.DoAndWait(func() { v.afterPrepare(result, err, progress) })
-	}()
+	})
 }
 
 // afterPrepare starts the API once the database step is done, or explains why
@@ -1227,7 +1227,7 @@ func (v *serverView) stopServer() {
 	v.start.Disable()
 	v.status.SetText("Stopping…")
 
-	go func() {
+	v.ui.background(func() {
 		err := v.server().Stop(stopTimeout)
 
 		fyne.Do(func() {
@@ -1240,7 +1240,7 @@ func (v *serverView) stopServer() {
 			}
 			v.refresh()
 		})
-	}()
+	})
 }
 
 func (v *serverView) openBrowser() {

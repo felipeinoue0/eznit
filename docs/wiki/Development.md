@@ -123,6 +123,14 @@ The window is Fyne, and Fyne needs cgo. That is why it is not in `make check`:
 | --- | --- |
 | `make build_gui` | builds `build/gui/eznit-gui` for the host (cgo + GL/X11 headers) |
 | `make gui_check` | `go vet -tags fyne ./...` and `go test -tags fyne ./...` |
+| `make fyne_race` | the window's suite under `-race` (cgo, about 2 minutes) |
+
+`make fyne_race` exists because the window's tests are the one place a data race
+can hide: Fyne's **test driver runs `fyne.Do` inline on the calling goroutine**,
+so a worker's widget work overlaps the test that started it. The window counts
+its background work and the tests wait for it (see `internal/fyneui/work.go`), and
+the `-race` run is what keeps that honest — it went from 319 reports to zero, and
+CI (GUI) runs the same command.
 
 On Debian/Ubuntu the headers are `libgl1-mesa-dev xorg-dev libwayland-dev
 libxkbcommon-dev wayland-protocols`; macOS needs the Xcode command line tools.
