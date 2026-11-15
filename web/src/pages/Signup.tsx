@@ -3,6 +3,18 @@ import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { login, messageOf, setToken, signup } from "../api";
 
+// An account is an address and a password typed twice — the API refuses a
+// mismatch and nothing else, so saying so is the whole requirement.
+const requirements =
+  "Any email address, and a password typed twice. There is no minimum password length.";
+
+// The API answers "user created!" for an address that already has an account —
+// on purpose, so signup cannot be used to discover one — and the login that
+// follows is what fails. "invalid credentials" is true and useless; this says
+// what to do without naming which of the two cases it is.
+const signupNotSignedIn =
+  "The signup went through, but the sign-in did not. If this address already has an account, log in with that account's password instead.";
+
 interface SignupProps {
   onAuthenticated: (token: string) => void;
 }
@@ -20,16 +32,19 @@ export default function Signup({ onAuthenticated }: SignupProps) {
     setBusy(true);
     setError(null);
 
+    let signedUp = false;
+
     try {
       await signup(email, password, confirmPassword);
       // A new account has no session yet, so the log-in follows rather than
       // throwing the reader back to the form to type it all again.
+      signedUp = true;
       const response = await login(email, password);
       setToken(response.token);
       onAuthenticated(response.token);
       navigate("/");
     } catch (cause: unknown) {
-      setError(messageOf(cause));
+      setError(signedUp ? signupNotSignedIn : messageOf(cause));
     } finally {
       setBusy(false);
     }
@@ -81,6 +96,8 @@ export default function Signup({ onAuthenticated }: SignupProps) {
             onChange={(event) => setConfirmPassword(event.target.value)}
           />
         </label>
+
+        <p className="hint">{requirements}</p>
 
         {error !== null ? (
           <p className="error" role="alert">
