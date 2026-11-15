@@ -60,7 +60,42 @@ func newTestServerViewIn(t *testing.T, dir, store string) *serverView {
 	// see what a person would (or would not) be able to reach.
 	window.SetContent(view.content())
 
+	// A step this view started has to finish before the app is quit, and the
+	// app's cleanup is registered above, so this one runs first. Quitting under
+	// a goroutine that is still laying a dialog out panics the whole package
+	// with no failing test, and the report points at whichever test came next
+	// (#328).
+	t.Cleanup(func() {
+		if view.stepDone == nil {
+			return
+		}
+
+		select {
+		case <-view.stepDone:
+		case <-time.After(5 * time.Second):
+			t.Error("the database step was still running when the test ended")
+		}
+	})
+
 	return view
+}
+
+// waitForStep blocks until the database step a test started has finished its
+// work on the view. The step runs on its own goroutine and the driver runs
+// fyne.Do inline there, so anything weaker lets the test return while that
+// goroutine is still touching widgets.
+func waitForStep(t *testing.T, view *serverView) {
+	t.Helper()
+
+	if view.stepDone == nil {
+		t.Fatal("no database step was started")
+	}
+
+	select {
+	case <-view.stepDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the database step never finished")
+	}
 }
 
 // bundleDir writes a bundle into a temp folder and returns it: a
@@ -1554,14 +1589,19 @@ func TestServerViewStartRunsTheDatabaseStep(t *testing.T) {
 
 	close(release)
 
-	// The driver runs fyne.Do inline on this goroutine, so the step hands back
-	// before it ends; the test must not quit the app while that is running.
-	deadline := time.Now().Add(5 * time.Second)
-	for view.preparing && time.Now().Before(deadline) {
-		time.Sleep(5 * time.Millisecond)
-	}
+	// Wait for the step itself, not for `preparing`: the panel clears that flag
+	// before it builds the failure dialog, so the old loop here let the test
+	// return — and quit the app — while the step was still inside
+	// dialog.ShowCustom. That is #328, and it panicked the whole package.
+	waitForStep(t, view)
+
 	if view.preparing {
 		t.Fatal("the panel is still preparing after the step returned")
+	}
+	// A step is only finished once its work on the view is: if the signal could
+	// be raised any earlier, the dialog would still be on its way up here.
+	if top := view.ui.window.Canvas().Overlays().Top(); top == nil {
+		t.Error("the step finished before the failure dialog was shown")
 	}
 	if !strings.Contains(view.note.Text, "docker-compose.yml") {
 		t.Errorf("note = %q, want the refusal reported", view.note.Text)
@@ -1596,6 +1636,10 @@ func TestServerViewStartRefusesABusyPort(t *testing.T) {
 
 	if prepared {
 		t.Error("the database step ran for a server that cannot bind its port")
+	}
+	// No goroutine at all: the refusal is before the step is started.
+	if view.stepDone != nil {
+		t.Error("the port check started the database step")
 	}
 	if !strings.Contains(view.note.Text, "already in use") {
 		t.Errorf("note = %q, want the busy port named", view.note.Text)
