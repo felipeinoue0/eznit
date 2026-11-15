@@ -149,7 +149,7 @@ func Run(version string, apiURL string, serverDir string) error {
 	})
 
 	if token, err := config.Value("token"); err == nil {
-		u.client.Token = token
+		u.client = u.client.WithToken(token)
 	}
 
 	if u.client.Token == "" {
@@ -283,7 +283,7 @@ func (u *ui) setAPI(address apiChoice) {
 	u.client = apiclient.New(u.address.url)
 
 	if token, err := config.Value("token"); err == nil {
-		u.client.Token = token
+		u.client = u.client.WithToken(token)
 	}
 
 	// The catalogue is per instance: a new address is a new catalogue.
@@ -312,7 +312,9 @@ func (u *ui) useServer(address apiChoice) (bool, error) {
 		return false, fmt.Errorf("the old session could not be forgotten: %w", err)
 	}
 
-	u.client.Token = ""
+	// A new client rather than a written one: a request that captured the old
+	// client still carries the token it was given, and this one is new (#342).
+	u.client = u.client.WithToken("")
 
 	return true, nil
 }
@@ -373,7 +375,10 @@ func (u *ui) forgetSession(message string) {
 		return
 	}
 
-	u.client.Token = ""
+	// A new client, not a cleared field: a request that captured the old one
+	// keeps the token it was sent with, and the window's next request has none
+	// (#342).
+	u.client = u.client.WithToken("")
 
 	if u.files != nil {
 		u.files.forget()

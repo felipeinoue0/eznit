@@ -299,8 +299,7 @@ func (l *loginView) submit() {
 
 			l.ui.local = local
 			l.ui.address = apiChoice{url: base, source: source}
-			l.ui.client = apiclient.New(base)
-			l.ui.client.Token = token
+			l.ui.client = apiclient.New(base).WithToken(token)
 			l.ui.showMain()
 		})
 	})

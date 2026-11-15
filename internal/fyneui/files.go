@@ -442,8 +442,10 @@ func (v *filesView) uploadFile() {
 
 		v.setStatus("Uploading "+path+"…", statusPending)
 
+		client := v.ui.client
+
 		v.ui.background(func() {
-			err := v.ui.client.UploadFile(path)
+			err := client.UploadFile(path)
 
 			fyne.Do(func() {
 				if err != nil {
@@ -477,8 +479,10 @@ func (v *filesView) downloadSelected() {
 
 		v.setStatus("Downloading "+file.Name+"…", statusPending)
 
+		client := v.ui.client
+
 		v.ui.background(func() {
-			saved, err := v.ui.client.DownloadFile(file.ID, path)
+			saved, err := client.DownloadFile(file.ID, path)
 
 			fyne.Do(func() {
 				if err != nil {
@@ -507,8 +511,10 @@ func (v *filesView) deleteSelected() {
 
 			v.setStatus("Deleting "+file.Name+"…", statusPending)
 
+			client := v.ui.client
+
 			v.ui.background(func() {
-				err := v.ui.client.DeleteFile(file.ID)
+				err := client.DeleteFile(file.ID)
 
 				fyne.Do(func() {
 					if err != nil {
@@ -531,8 +537,10 @@ func (v *filesView) toggleShare() {
 	apply := func(public bool) {
 		v.setStatus("Updating "+file.Name+"…", statusPending)
 
+		client := v.ui.client
+
 		v.ui.background(func() {
-			err := v.ui.client.SetFilePublic(file.ID, public)
+			err := client.SetFilePublic(file.ID, public)
 
 			fyne.Do(func() {
 				if err != nil {

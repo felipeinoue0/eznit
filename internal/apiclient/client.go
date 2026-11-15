@@ -76,6 +76,28 @@ func New(baseURL string) *Client {
 	}
 }
 
+// WithToken returns a client for the same instance carrying another session
+// token. The receiver is left alone: a client is built and then read, never
+// written, so a request that already captured one cannot observe a later
+// sign-out or a new login (#342).
+//
+// The transport is shared on purpose — an http.Client is safe for concurrent
+// use, and a copy per request would throw away its connection pool.
+func (c *Client) WithToken(token string) *Client {
+	if c == nil {
+		return &Client{Token: token, HTTP: http.DefaultClient}
+	}
+
+	copied := *c
+	copied.Token = token
+
+	if copied.HTTP == nil {
+		copied.HTTP = http.DefaultClient
+	}
+
+	return &copied
+}
+
 // NormalizeBaseURL trims the trailing slash and fills the default.
 func NormalizeBaseURL(baseURL string) string {
 	base := strings.TrimSpace(baseURL)

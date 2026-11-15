@@ -178,6 +178,35 @@ func TestConnectWithoutASessionShowsLogin(t *testing.T) {
 	}
 }
 
+// A client a request has captured is never written: signing out replaces the
+// window's client, and the one already in a worker's hand keeps its token
+// (#342). This is the contract that makes the request path race-free; the
+// `-race` suite is what proves nothing writes a shared client.
+func TestForgetSessionLeavesACapturedClientAlone(t *testing.T) {
+	u := newTestUI(t)
+
+	if err := config.Set("token", "the-token"); err != nil {
+		t.Fatal(err)
+	}
+
+	u.client = apiclient.New("http://127.0.0.1:4321").WithToken("the-token")
+	inFlight := u.client
+
+	u.forgetSession(sessionEnded)
+
+	if inFlight.Token != "the-token" {
+		t.Errorf("the captured client's token = %q, want it untouched", inFlight.Token)
+	}
+
+	if u.client.Token != "" {
+		t.Errorf("the window's client still carries %q", u.client.Token)
+	}
+
+	if _, err := config.Value("token"); err == nil {
+		t.Error("the stored token is still there")
+	}
+}
+
 // A session belongs to the Files tab: that is the tab the login form replaces,
 // so that is where signing out belongs. It forgets the token and the catalogue,
 // and keeps the address and the host tokens.
