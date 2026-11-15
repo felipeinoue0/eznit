@@ -246,14 +246,18 @@ func selectableWrap() *prose {
 
 // reload fetches the catalogue again with the current filters.
 func (v *templatesView) reload() {
-	address := v.ui.client.BaseURL
+	// The client is read here, on the UI side, and used by the request: a
+	// connect replaces u.client, and a worker that read the field itself would
+	// be reading a pointer the UI is rewriting.
+	client := v.ui.client
+	address := client.BaseURL
 	kind := v.selectedKind()
 	mine := v.mine.Checked
 
 	v.setStatus("Loading the catalogue from "+address+"…", statusPending)
 
-	go func() {
-		items, err := v.ui.client.ListTemplates(mine, kind)
+	v.ui.background(func() {
+		items, err := client.ListTemplates(mine, kind)
 
 		fyne.Do(func() {
 			if err != nil {
@@ -303,7 +307,7 @@ func (v *templatesView) reload() {
 
 			v.setStatus(fmt.Sprintf("%d template(s) on %s.", len(items), address), statusOK)
 		})
-	}()
+	})
 }
 
 // ensureLoaded fetches the catalogue the first time the tab is opened.
@@ -356,14 +360,15 @@ func (v *templatesView) loadSelected() {
 	}
 
 	id := item.ID.String()
+	client := v.ui.client
 
 	v.detail = nil
 	v.showDetail(nil)
 	v.updateActions()
 	v.setStatus("Loading "+item.Name+"…", statusPending)
 
-	go func() {
-		detail, err := v.ui.client.GetTemplate(id)
+	v.ui.background(func() {
+		detail, err := client.GetTemplate(id)
 
 		fyne.Do(func() {
 			// The selection may have moved while the request was in flight.
@@ -384,7 +389,7 @@ func (v *templatesView) loadSelected() {
 			v.setStatus(fmt.Sprintf("%s — %d file(s), %d command(s), %d variable(s).",
 				detail.Name, len(detail.Files), len(detail.Commands), len(detail.Variables)), statusOK)
 		})
-	}()
+	})
 }
 
 // showDetail fills the summary and the three tabs, or says how to fill them.

@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/theme"
@@ -365,10 +364,10 @@ func fillAndSubmit(t *testing.T, view *loginView, server *httptest.Server) {
 
 	view.submit()
 
-	deadline := time.Now().Add(5 * time.Second)
-	for view.busy && time.Now().Before(deadline) {
-		time.Sleep(2 * time.Millisecond)
-	}
+	// Wait through the window's own tally, not by polling `busy`: the test
+	// driver runs fyne.Do inline, so the worker writes that field on its own
+	// goroutine and the poll is a data race (#333).
+	view.ui.settle()
 
 	if view.busy {
 		t.Fatal("the form is still waiting for an answer")

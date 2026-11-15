@@ -131,7 +131,7 @@ func (u *ui) aboutContent() fyne.CanvasObject {
 func (u *ui) checkForUpdates(status *widget.Label, install, restore, restart *widget.Button) {
 	status.SetText("Checking for updates…")
 
-	go func() {
+	u.background(func() {
 		latest, err := u.updater.Latest()
 
 		fyne.Do(func() {
@@ -156,7 +156,7 @@ func (u *ui) checkForUpdates(status *widget.Label, install, restore, restart *wi
 				install.Show()
 			}
 		})
-	}()
+	})
 }
 
 // installLatest looks the newest release up again before asking, so a stale
@@ -164,7 +164,7 @@ func (u *ui) checkForUpdates(status *widget.Label, install, restore, restart *wi
 func (u *ui) installLatest(status *widget.Label, install, restore, restart *widget.Button) {
 	status.SetText("Looking up the newest release…")
 
-	go func() {
+	u.background(func() {
 		latest, err := u.updater.Latest()
 
 		fyne.Do(func() {
@@ -188,7 +188,7 @@ func (u *ui) installLatest(status *widget.Label, install, restore, restart *widg
 
 					status.SetText("Installing eznit " + latest + "…")
 
-					go func() {
+					u.background(func() {
 						err := u.updater.Install(latest)
 
 						fyne.Do(func() {
@@ -204,10 +204,10 @@ func (u *ui) installLatest(status *widget.Label, install, restore, restart *widg
 								restore.Hide()
 							}
 						})
-					}()
+					})
 				}, u.window)
 		})
-	}()
+	})
 }
 
 // restorePrevious puts back the version saved by the last install.
@@ -221,7 +221,7 @@ func (u *ui) restorePrevious(previous string, status *widget.Label, install, res
 
 			status.SetText("Restoring eznit " + previous + "…")
 
-			go func() {
+			u.background(func() {
 				err := u.updater.Restore()
 
 				fyne.Do(func() {
@@ -239,6 +239,6 @@ func (u *ui) restorePrevious(previous string, status *widget.Label, install, res
 					}
 					restart.Show()
 				})
-			}()
+			})
 		}, u.window)
 }

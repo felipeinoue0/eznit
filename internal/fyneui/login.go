@@ -248,7 +248,7 @@ func (l *loginView) submit() {
 	confirm := l.confirm.Text
 	local := l.local.Checked
 
-	go func() {
+	l.ui.background(func() {
 		client := apiclient.New(base)
 
 		var token string
@@ -303,7 +303,7 @@ func (l *loginView) submit() {
 			l.ui.client.Token = token
 			l.ui.showMain()
 		})
-	}()
+	})
 }
 
 // signupNotSignedIn is what a refused sign-in after a signup says. The API

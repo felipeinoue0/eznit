@@ -328,20 +328,20 @@ func (v *filesView) copySelectedDetails() {
 	v.setStatus("Copied the details of "+file.Name+".", statusOK)
 }
 
-// refresh reloads the library. The request runs off the UI goroutine and the
-// widgets are touched only inside fyne.Do.
+// The request runs off the UI goroutine, but the window counts it, so a
+// test can wait for the answer instead of polling for it.
 //
-// The client is captured before the request: a connect can replace u.client
-// while a listing is in flight, and an answer that arrives for the previous
-// instance must not be applied to the new one — a 401 from the old server would
-// otherwise end a session the new one still honours.
+// The client is captured before the request: a connect can replace
+// u.client while a listing is in flight, and an answer that arrives for the
+// previous instance must not be applied to the new one — a 401 from the old
+// server would otherwise end a session the new one still honours.
 func (v *filesView) refresh() {
 	client := v.ui.client
 	address := client.BaseURL
 
 	v.setStatus("Loading your files from "+address+"…", statusPending)
 
-	go func() {
+	v.ui.background(func() {
 		files, err := client.ListFiles()
 
 		fyne.Do(func() {
@@ -368,7 +368,7 @@ func (v *filesView) refresh() {
 
 			v.setStatus(fmt.Sprintf("%d file(s) on %s.", len(files), address), statusOK)
 		})
-	}()
+	})
 }
 
 // failedToLoad routes a listing that did not arrive. The two failures are not
@@ -442,7 +442,7 @@ func (v *filesView) uploadFile() {
 
 		v.setStatus("Uploading "+path+"…", statusPending)
 
-		go func() {
+		v.ui.background(func() {
 			err := v.ui.client.UploadFile(path)
 
 			fyne.Do(func() {
@@ -453,7 +453,7 @@ func (v *filesView) uploadFile() {
 
 				v.refresh()
 			})
-		}()
+		})
 	}, v.ui.window)
 }
 
@@ -477,7 +477,7 @@ func (v *filesView) downloadSelected() {
 
 		v.setStatus("Downloading "+file.Name+"…", statusPending)
 
-		go func() {
+		v.ui.background(func() {
 			saved, err := v.ui.client.DownloadFile(file.ID, path)
 
 			fyne.Do(func() {
@@ -488,7 +488,7 @@ func (v *filesView) downloadSelected() {
 
 				v.setStatus("Saved to "+saved+".", statusOK)
 			})
-		}()
+		})
 	}, v.ui.window)
 }
 
@@ -507,7 +507,7 @@ func (v *filesView) deleteSelected() {
 
 			v.setStatus("Deleting "+file.Name+"…", statusPending)
 
-			go func() {
+			v.ui.background(func() {
 				err := v.ui.client.DeleteFile(file.ID)
 
 				fyne.Do(func() {
@@ -518,7 +518,7 @@ func (v *filesView) deleteSelected() {
 
 					v.refresh()
 				})
-			}()
+			})
 		}, v.ui.window)
 }
 
@@ -531,7 +531,7 @@ func (v *filesView) toggleShare() {
 	apply := func(public bool) {
 		v.setStatus("Updating "+file.Name+"…", statusPending)
 
-		go func() {
+		v.ui.background(func() {
 			err := v.ui.client.SetFilePublic(file.ID, public)
 
 			fyne.Do(func() {
@@ -542,7 +542,7 @@ func (v *filesView) toggleShare() {
 
 				v.refresh()
 			})
-		}()
+		})
 	}
 
 	if file.IsPublic {

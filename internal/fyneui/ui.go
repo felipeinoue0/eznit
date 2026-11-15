@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/app"
@@ -53,6 +54,11 @@ type ui struct {
 	updater   *appUpdater
 
 	tabs *container.AppTabs
+
+	// work counts the background requests the tabs have running, so a test can
+	// wait for the window to be idle instead of polling it while it is busy
+	// (see background and settle in work.go).
+	work sync.WaitGroup
 }
 
 // apiChoice is one server address and the reason it is the current one.
@@ -135,10 +141,10 @@ func Run(version string, apiURL string, serverDir string) error {
 					return
 				}
 
-				go func() {
+				u.background(func() {
 					_ = u.server.server().Stop(stopTimeout)
 					fyne.Do(window.Close)
-				}()
+				})
 			}, window)
 	})
 

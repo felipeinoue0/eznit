@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
@@ -38,6 +37,10 @@ func newTestFilesView(t *testing.T, address apiChoice) *filesView {
 
 	u.files = newFilesView(u)
 	u.window.SetContent(u.files.content())
+
+	// A bar's Test and a listing run on the window's tally: wait for them
+	// before the driver goes away (#333).
+	t.Cleanup(u.settle)
 
 	return u.files
 }
@@ -133,10 +136,10 @@ func TestRefusedListingGoesToLogin(t *testing.T) {
 
 	u.files.refresh()
 
-	deadline := time.Now().Add(5 * time.Second)
-	for findButton(u.tabs.Items[0].Content, "Log in") == nil && time.Now().Before(deadline) {
-		time.Sleep(2 * time.Millisecond)
-	}
+	// Wait for the answer instead of polling the tree: the poll reads widgets
+	// the worker writes (the test driver runs fyne.Do inline), which was one of
+	// the races #333 recorded.
+	u.settle()
 
 	if findButton(u.tabs.Items[0].Content, "Log in") == nil {
 		t.Fatal("a refused listing did not bring the login card back")
@@ -311,6 +314,11 @@ func TestFilesAddressIsTypedAndConnected(t *testing.T) {
 
 	u.files.bar.entry.SetText("http://127.0.0.1:5000")
 	u.files.bar.connectTyped()
+
+	// The connect lands on the library, which starts a listing: let it finish
+	// before reading the window, or the worker's widget work overlaps this
+	// goroutine (#333).
+	u.settle()
 
 	stored, err := config.Value("api_url")
 	if err != nil || stored != "http://127.0.0.1:5000" {

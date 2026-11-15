@@ -46,11 +46,13 @@ func newTestServerViewIn(t *testing.T, dir, store string) *serverView {
 
 	window := app.NewWindow("test")
 
-	view := newServerView(&ui{
+	u := &ui{
 		app:     app,
 		window:  window,
 		updater: &appUpdater{version: "test"},
-	}, dir)
+	}
+
+	view := newServerView(u, dir)
 
 	// Run wires the panel back into the window; a test that leaves it out would
 	// not see the address the Server tab's configuration names.
@@ -59,6 +61,10 @@ func newTestServerViewIn(t *testing.T, dir, store string) *serverView {
 	// Lay the tab out as the window would: a test that only builds it cannot
 	// see what a person would (or would not) be able to reach.
 	window.SetContent(view.content())
+
+	// Work the panel started — a Start, a Stop, the health check — runs on the
+	// window's tally, so the driver can wait for it instead of racing it.
+	t.Cleanup(u.settle)
 
 	// A step this view started has to finish before the app is quit, and the
 	// app's cleanup is registered above, so this one runs first. Quitting under
