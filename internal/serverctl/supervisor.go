@@ -194,8 +194,12 @@ func (s *Supervisor) start() error {
 		s.cmd = nil
 		s.mu.Unlock()
 
-		close(done)
+		// The notify goes first, so a caller that waits on done — Stop does —
+		// knows the window has already been told. Closing done first leaves the
+		// callback racing whoever stopped the server, which is how a test that
+		// refreshes after Stop collided with the notify's own refresh.
 		s.changed()
+		close(done)
 	}()
 
 	return nil

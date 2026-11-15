@@ -10,6 +10,7 @@ package apiclient
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime"
@@ -44,6 +45,15 @@ type File struct {
 	IsPublic bool   `json:"is_public"`
 }
 
+// ErrUnreachable is the failure a request gets when the instance could not be
+// reached at all — no answer, as opposed to an answer the caller did not like.
+//
+// The two are different things to say and different things to do: a refusal
+// means the request arrived and was judged, so a token it refused is dead; an
+// unreachable server has said nothing about the token, and the same token may
+// work the moment the server is back.
+var ErrUnreachable = errors.New("the API could not be reached")
+
 // APIError is a non-2xx answer, with the host's own message when it sent one.
 type APIError struct {
 	Status  int
@@ -64,6 +74,28 @@ func New(baseURL string) *Client {
 		BaseURL: NormalizeBaseURL(baseURL),
 		HTTP:    &http.Client{Timeout: 60 * time.Second},
 	}
+}
+
+// WithToken returns a client for the same instance carrying another session
+// token. The receiver is left alone: a client is built and then read, never
+// written, so a request that already captured one cannot observe a later
+// sign-out or a new login (#342).
+//
+// The transport is shared on purpose — an http.Client is safe for concurrent
+// use, and a copy per request would throw away its connection pool.
+func (c *Client) WithToken(token string) *Client {
+	if c == nil {
+		return &Client{Token: token, HTTP: http.DefaultClient}
+	}
+
+	copied := *c
+	copied.Token = token
+
+	if copied.HTTP == nil {
+		copied.HTTP = http.DefaultClient
+	}
+
+	return &copied
 }
 
 // NormalizeBaseURL trims the trailing slash and fills the default.
@@ -125,7 +157,7 @@ func (c *Client) Health() error {
 
 	response, err := c.HTTP.Do(request)
 	if err != nil {
-		return fmt.Errorf("the API could not be reached: %w", err)
+		return fmt.Errorf("%w: %w", ErrUnreachable, err)
 	}
 	defer response.Body.Close()
 
@@ -236,7 +268,7 @@ func (c *Client) DownloadFile(id string, dest string) (string, error) {
 
 	response, err := c.HTTP.Do(request)
 	if err != nil {
-		return "", fmt.Errorf("the API could not be reached: %w", err)
+		return "", fmt.Errorf("%w: %w", ErrUnreachable, err)
 	}
 	defer response.Body.Close()
 
@@ -331,7 +363,7 @@ func (c *Client) do(method string, path string, body io.Reader, out any) error {
 func (c *Client) send(request *http.Request, out any) error {
 	response, err := c.HTTP.Do(request)
 	if err != nil {
-		return fmt.Errorf("the API could not be reached: %w", err)
+		return fmt.Errorf("%w: %w", ErrUnreachable, err)
 	}
 	defer response.Body.Close()
 

@@ -5,6 +5,7 @@ package fyneui
 import (
 	"fmt"
 	"io"
+	"net/http"
 	"path/filepath"
 	"strings"
 
@@ -172,7 +173,7 @@ func (v *templatesView) content() fyne.CanvasObject {
 	// before the bar that holds it.
 	v.dot = canvas.NewCircle(statusColour(v.ui.app.Settings().ThemeVariant(), statusIdle))
 
-	filters := container.NewHBox(muted("Kind"), v.kind, v.mine.row)
+	filters := container.NewHBox(muted("Kind"), v.kind, v.mine.row, layout.NewSpacer(), v.refresh)
 
 	v.buildDetail()
 	split := container.NewVSplit(v.table, v.detailPane())
@@ -245,14 +246,18 @@ func selectableWrap() *prose {
 
 // reload fetches the catalogue again with the current filters.
 func (v *templatesView) reload() {
-	address := v.ui.client.BaseURL
+	// The client is read here, on the UI side, and used by the request: a
+	// connect replaces u.client, and a worker that read the field itself would
+	// be reading a pointer the UI is rewriting.
+	client := v.ui.client
+	address := client.BaseURL
 	kind := v.selectedKind()
 	mine := v.mine.Checked
 
 	v.setStatus("Loading the catalogue from "+address+"…", statusPending)
 
-	go func() {
-		items, err := v.ui.client.ListTemplates(mine, kind)
+	v.ui.background(func() {
+		items, err := client.ListTemplates(mine, kind)
 
 		fyne.Do(func() {
 			if err != nil {
@@ -264,9 +269,20 @@ func (v *templatesView) reload() {
 				v.showDetail(nil)
 				v.updateActions()
 
-				v.setStatus(fmt.Sprintf(
-					"The catalogue could not be loaded from %s (%s). Use Refresh to try again, or change the address on the Files tab.",
-					address, messageOf(err)), statusError)
+				// One sentence, and the button that answers it is on this tab
+				// (#338). The address is named because a wrong one is the
+				// usual cause, and the bar above is where it gets fixed.
+				if apiErrorStatus(err) == http.StatusUnauthorized {
+					// The catalogue asked for this account's own templates, or
+					// the address holds a token the API no longer accepts: the
+					// same rule as the Files tab, and the login card is there.
+					v.setStatus(sessionEnded, statusError)
+					v.ui.forgetSession(sessionEnded)
+
+					return
+				}
+
+				v.setStatus("Cannot load the catalogue from "+address+".", statusError)
 
 				return
 			}
@@ -285,13 +301,13 @@ func (v *templatesView) reload() {
 			v.updateActions()
 
 			if len(items) == 0 {
-				v.setStatus("No template matches. A shared file is not a template: publish a folder with `eznit template publish ./folder`, then Refresh.", statusOK)
+				v.setStatus("No template matches. A shared file is not a template — publish a folder with `eznit template publish ./folder`.", statusOK)
 				return
 			}
 
 			v.setStatus(fmt.Sprintf("%d template(s) on %s.", len(items), address), statusOK)
 		})
-	}()
+	})
 }
 
 // ensureLoaded fetches the catalogue the first time the tab is opened.
@@ -344,14 +360,15 @@ func (v *templatesView) loadSelected() {
 	}
 
 	id := item.ID.String()
+	client := v.ui.client
 
 	v.detail = nil
 	v.showDetail(nil)
 	v.updateActions()
 	v.setStatus("Loading "+item.Name+"…", statusPending)
 
-	go func() {
-		detail, err := v.ui.client.GetTemplate(id)
+	v.ui.background(func() {
+		detail, err := client.GetTemplate(id)
 
 		fyne.Do(func() {
 			// The selection may have moved while the request was in flight.
@@ -372,7 +389,7 @@ func (v *templatesView) loadSelected() {
 			v.setStatus(fmt.Sprintf("%s — %d file(s), %d command(s), %d variable(s).",
 				detail.Name, len(detail.Files), len(detail.Commands), len(detail.Variables)), statusOK)
 		})
-	}()
+	})
 }
 
 // showDetail fills the summary and the three tabs, or says how to fill them.
@@ -384,8 +401,7 @@ func (v *templatesView) showDetail(detail *templates.TemplateDetail) {
 	}
 
 	if detail == nil {
-		v.summary.SetText("Select a template to see what is inside it: a tree of files with their paths, " +
-			"the variables it asks for and the commands it pulls in. Applying it writes those files into a folder you pick.")
+		v.summary.SetText("Select a template to see its files, variables and commands.")
 		v.files.SetText("")
 		v.variables.SetText("")
 		v.commands.SetText("")
@@ -615,12 +631,14 @@ func bundleFilename(detail *templates.TemplateDetail) string {
 	return name + bundleExtension
 }
 
-// setStatus writes the message under the split and colours the dot with it.
+// setStatus writes the message under the split, colours the dot with it, and
+// colours the words: a red dot and grey text is half an error message.
 func (v *templatesView) setStatus(text string, kind statusKind) {
 	if v.status == nil {
 		return
 	}
 
+	v.status.Importance = statusImportance(kind)
 	v.status.SetText(text)
 
 	if v.dot != nil {

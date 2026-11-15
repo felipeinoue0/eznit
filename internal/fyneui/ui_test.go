@@ -149,7 +149,62 @@ func newTestUI(t *testing.T) *ui {
 	)
 	u.window.SetContent(u.tabs)
 
+	// Settle before the app quits. A request still in flight would otherwise
+	// touch widgets after the driver is gone, and the -race suite would report
+	// it against whichever test happened to run next (#333). Cleanups run last
+	// in, first out, so this runs before the Quit registered above.
+	t.Cleanup(u.settle)
+
 	return u
+}
+
+// A connect is not a login: connecting from another tab with no session leaves
+// the Files tab asking for one, rather than showing a library it cannot fill
+// (#336).
+func TestConnectWithoutASessionShowsLogin(t *testing.T) {
+	u := newTestUI(t)
+
+	signedOut, err := u.connect(apiChoice{url: "http://127.0.0.1:4321", source: "the address you entered"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !signedOut {
+		t.Error("a connect without a session did not report a sign-out")
+	}
+
+	if findButton(u.tabs.Items[0].Content, "Log in") == nil {
+		t.Error("the Files tab shows no login card after a connect without a session")
+	}
+}
+
+// A client a request has captured is never written: signing out replaces the
+// window's client, and the one already in a worker's hand keeps its token
+// (#342). This is the contract that makes the request path race-free; the
+// `-race` suite is what proves nothing writes a shared client.
+func TestForgetSessionLeavesACapturedClientAlone(t *testing.T) {
+	u := newTestUI(t)
+
+	if err := config.Set("token", "the-token"); err != nil {
+		t.Fatal(err)
+	}
+
+	u.client = apiclient.New("http://127.0.0.1:4321").WithToken("the-token")
+	inFlight := u.client
+
+	u.forgetSession(sessionEnded)
+
+	if inFlight.Token != "the-token" {
+		t.Errorf("the captured client's token = %q, want it untouched", inFlight.Token)
+	}
+
+	if u.client.Token != "" {
+		t.Errorf("the window's client still carries %q", u.client.Token)
+	}
+
+	if _, err := config.Value("token"); err == nil {
+		t.Error("the stored token is still there")
+	}
 }
 
 // A session belongs to the Files tab: that is the tab the login form replaces,

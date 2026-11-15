@@ -1,19 +1,19 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { login, messageOf, setToken, signup } from "../api";
+import { login, messageOf, refused, setToken, signup } from "../api";
 
 // An account is an address and a password typed twice — the API refuses a
-// mismatch and nothing else, so saying so is the whole requirement.
-const requirements =
-  "Any email address, and a password typed twice. There is no minimum password length.";
+// mismatch and nothing else, so saying so is the whole requirement. One line,
+// the same one the desktop window shows (#339).
+const requirements = "Any email, and a password typed twice.";
 
 // The API answers "user created!" for an address that already has an account —
 // on purpose, so signup cannot be used to discover one — and the login that
-// follows is what fails. "invalid credentials" is true and useless; this says
-// what to do without naming which of the two cases it is.
-const signupNotSignedIn =
-  "The signup went through, but the sign-in did not. If this address already has an account, log in with that account's password instead.";
+// follows is what fails. "invalid credentials" is true and useless; this names
+// the likely case and the way out. It is used for a 401 only: a signup followed
+// by a server that went away gets its own sentence.
+const signupNotSignedIn = "That email already has an account. Log in with its password.";
 
 interface SignupProps {
   onAuthenticated: (token: string) => void;
@@ -44,7 +44,9 @@ export default function Signup({ onAuthenticated }: SignupProps) {
       onAuthenticated(response.token);
       navigate("/");
     } catch (cause: unknown) {
-      setError(signedUp ? signupNotSignedIn : messageOf(cause));
+      // The tailored line is for a refused pair after a signup; a server that
+      // went away between the two calls gets its own sentence (#337).
+      setError(signedUp && refused(cause) ? signupNotSignedIn : messageOf(cause));
     } finally {
       setBusy(false);
     }

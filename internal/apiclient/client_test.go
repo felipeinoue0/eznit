@@ -141,10 +141,43 @@ func TestHealth(t *testing.T) {
 		address := server.URL
 		server.Close()
 
-		if err := New(address).Health(); err == nil {
-			t.Error("Health() against a closed server = nil, want an error")
+		err := New(address).Health()
+		if err == nil {
+			t.Fatal("Health() against a closed server = nil, want an error")
+		}
+
+		// The window tells "the server is not there" from "the server said no"
+		// by this sentinel, so a refusal and a transport failure must not be
+		// the same error (#335).
+		if !errors.Is(err, ErrUnreachable) {
+			t.Errorf("Health() = %v, want ErrUnreachable in the chain", err)
 		}
 	})
+}
+
+// A client is built and then read: the window replaces it to change the
+// session, so a request that captured one keeps the token it was given (#342).
+func TestWithTokenLeavesTheOriginalAlone(t *testing.T) {
+	client := New("http://127.0.0.1:4000")
+	client.Token = "first"
+
+	signedOut := client.WithToken("")
+
+	if client.Token != "first" {
+		t.Errorf("the original token = %q, want it untouched", client.Token)
+	}
+
+	if signedOut.Token != "" {
+		t.Errorf("WithToken(\"\") token = %q, want none", signedOut.Token)
+	}
+
+	if signedOut.BaseURL != client.BaseURL {
+		t.Errorf("BaseURL = %q, want the same instance %q", signedOut.BaseURL, client.BaseURL)
+	}
+
+	if signedOut.HTTP != client.HTTP {
+		t.Error("WithToken() replaced the transport; the copy shares it")
+	}
 }
 
 func TestLogin(t *testing.T) {

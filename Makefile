@@ -189,6 +189,17 @@ gui_check: ## vet and test the Fyne code (needs cgo + GL/X11 headers)
 	CGO_ENABLED=1 go vet -tags fyne ./...; \
 	CGO_ENABLED=1 go test -tags fyne ./...
 
+# The window's suite is the one place a data race can hide: the test driver runs
+# fyne.Do *inline on the calling goroutine*, so a worker's widget work can
+# overlap the test that started it, and plain `go test` says nothing about it.
+# Run the detector here rather than adding it to gui_check: it triples the time
+# (10s -> 2m) for a check that only this package needs (#333).
+fyne_race: ## run the window suite under the race detector (needs cgo)
+	@if ! command -v go >/dev/null 2>&1; then \
+	  echo "ERROR: go is not installed — the race check cannot run" >&2; exit 1; \
+	fi; \
+	CGO_ENABLED=1 go test -race -tags "fyne ci" -count=1 ./internal/fyneui/
+
 # --- Release packaging -------------------------------------------------------
 # One archive per platform, each extracting into one folder named after it. A
 # flat archive scatters the binaries, the installer and the licenses into the

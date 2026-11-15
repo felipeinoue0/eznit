@@ -160,7 +160,7 @@ func (b *addressBar) testTyped() {
 
 	b.message("Asking "+address+"…", statusPending)
 
-	go func() {
+	b.ui.background(func() {
 		started := time.Now()
 		err := apiclient.New(address).Health()
 		took := time.Since(started)
@@ -173,7 +173,7 @@ func (b *addressBar) testTyped() {
 
 			b.message(fmt.Sprintf("%s answered in %s.", address, took.Round(time.Millisecond)), statusOK)
 		})
-	}()
+	})
 }
 
 // connectTyped switches every tab to the address the bar means. The rules are
@@ -211,9 +211,14 @@ func (b *addressBar) connectTyped() {
 }
 
 // apply performs the switch and reports whatever went wrong.
+//
+// It touches no widget after the switch: connect syncs every bar before it
+// moves a tab, and the library builds its own bar already synced, so the last
+// thing a connect does is start the listing. That order matters — the test
+// driver runs the listing's fyne.Do inline, so widget work after this point
+// would race the request it just started (#333).
 func (b *addressBar) apply(choice apiChoice) {
-	signedOut, err := b.ui.connect(choice)
-	if err != nil {
+	if _, err := b.ui.connect(choice); err != nil {
 		b.message(err.Error(), statusError)
 
 		return
@@ -221,10 +226,6 @@ func (b *addressBar) apply(choice apiChoice) {
 
 	if b.afterConnect != nil {
 		b.afterConnect()
-	}
-
-	if !signedOut {
-		b.sync()
 	}
 }
 

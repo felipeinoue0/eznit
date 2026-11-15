@@ -3,15 +3,17 @@
 package fyneui
 
 import (
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
+
+	"github.com/fiwon123/eznit/internal/apiclient"
 )
 
 // newTestLogin builds the sign-in form in the Files tab, which is where it
@@ -21,7 +23,7 @@ func newTestLogin(t *testing.T, signup bool) *loginView {
 
 	u := newTestUI(t)
 
-	view := newLoginView(u, "")
+	view := newLoginView(u, "", statusIdle)
 	view.signup = signup
 	u.setFilesTab(view.content())
 
@@ -111,7 +113,7 @@ func TestLoginServerFieldShowsTheWholeAddress(t *testing.T) {
 func TestLoginStatusIsCentredAndWrapped(t *testing.T) {
 	view := newTestLogin(t, false)
 
-	view.setStatus("The server at http://a-very-long-server-name.example.com:4000 did not answer.")
+	view.setStatus("The server at http://a-very-long-server-name.example.com:4000 did not answer.", statusError)
 
 	if view.status.Alignment != fyne.TextAlignCenter {
 		t.Errorf("status alignment = %v, want centre", view.status.Alignment)
@@ -166,7 +168,7 @@ func TestLoginCardFitsBothModes(t *testing.T) {
 
 		t.Run(name, func(t *testing.T) {
 			view := newTestLogin(t, signup)
-			view.setStatus(long)
+			view.setStatus(long, statusError)
 
 			// The window lays the card out before it is measured; do what a
 			// window does.
@@ -233,9 +235,10 @@ func TestLoginExplainsAFailedSignInAfterSignup(t *testing.T) {
 	}
 }
 
-// A plain log-in failure keeps the server's own message: the tailored line is
-// for the signup path, where the password that failed is the one just typed.
-func TestLoginKeepsTheServerMessageForAPlainLogin(t *testing.T) {
+// A plain log-in failure is named plainly: the server's "invalid credentials"
+// is the API's word, not one a person reads, and it is the same either way
+// (#337).
+func TestLoginNamesAWrongPairPlainly(t *testing.T) {
 	server, seen := accountServer(t, http.StatusOK, http.StatusUnauthorized)
 
 	view := newTestLogin(t, false)
@@ -245,8 +248,78 @@ func TestLoginKeepsTheServerMessageForAPlainLogin(t *testing.T) {
 		t.Fatalf("the form called signup %d and login %d times, want only a login", seen[0], seen[1])
 	}
 
-	if view.status.Text != "invalid credentials" {
-		t.Errorf("status = %q, want the server's message", view.status.Text)
+	if view.status.Text != "Wrong email or password." {
+		t.Errorf("status = %q, want the one line a refused pair gets", view.status.Text)
+	}
+
+	if view.status.Importance != widget.DangerImportance {
+		t.Errorf("status importance = %v, want the error colour", view.status.Importance)
+	}
+}
+
+// A wrong answer is drawn in red, so it is visible before it is read. The card
+// used to say everything in the same grey (#337).
+func TestLoginErrorsAreRed(t *testing.T) {
+	view := newTestLogin(t, true)
+
+	view.email.SetText("someone@example.test")
+	view.pass.SetText("one")
+	view.confirm.SetText("another")
+	view.submit()
+
+	if got := view.status.Text; got != "Passwords do not match." {
+		t.Errorf("status = %q, want the mismatch named in one line", got)
+	}
+
+	if view.status.Importance != widget.DangerImportance {
+		t.Errorf("status importance = %v, want the error colour", view.status.Importance)
+	}
+
+	// A message that is not a failure is ordinary text again.
+	view.setStatus("Talking to http://127.0.0.1:4000…", statusPending)
+
+	if view.status.Importance == widget.DangerImportance {
+		t.Error("the status is still red for a message that is not a failure")
+	}
+}
+
+// An instance that cannot be reached is named by its address: the dial error
+// behind it is not a sentence a person reads (#337).
+func TestLoginNamesAnUnreachableServer(t *testing.T) {
+	err := fmt.Errorf("%w: dial tcp 127.0.0.1:4000: connect: connection refused", apiclient.ErrUnreachable)
+
+	if got := loginMessage("http://127.0.0.1:4000", err); got != "Cannot reach http://127.0.0.1:4000." {
+		t.Errorf("loginMessage() = %q, want the address named in one line", got)
+	}
+}
+
+// A signup followed by a server that went away is not "that email already has
+// an account": the tailored line is for a refused pair, and anything else said
+// about the account would be a guess (#337).
+func TestLoginAfterSignupSaysWhatWentWrong(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+
+		switch r.URL.Path {
+		case "/v1/signup":
+			_, _ = w.Write([]byte(`{"status_code":200,"message":"user created!"}`))
+		case "/v1/login":
+			w.WriteHeader(http.StatusServiceUnavailable)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	view := newTestLogin(t, true)
+	fillAndSubmit(t, view, server)
+
+	if strings.Contains(view.status.Text, "already has an account") {
+		t.Errorf("status = %q, want the failure the server gave, not a guess about the account", view.status.Text)
+	}
+
+	if !strings.Contains(view.status.Text, "503") {
+		t.Errorf("status = %q, want the status the server answered", view.status.Text)
 	}
 }
 
@@ -291,10 +364,10 @@ func fillAndSubmit(t *testing.T, view *loginView, server *httptest.Server) {
 
 	view.submit()
 
-	deadline := time.Now().Add(5 * time.Second)
-	for view.busy && time.Now().Before(deadline) {
-		time.Sleep(2 * time.Millisecond)
-	}
+	// Wait through the window's own tally, not by polling `busy`: the test
+	// driver runs fyne.Do inline, so the worker writes that field on its own
+	// goroutine and the poll is a data race (#333).
+	view.ui.settle()
 
 	if view.busy {
 		t.Fatal("the form is still waiting for an answer")

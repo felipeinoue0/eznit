@@ -3,6 +3,9 @@
 package fyneui
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -34,6 +37,10 @@ func newTestFilesView(t *testing.T, address apiChoice) *filesView {
 
 	u.files = newFilesView(u)
 	u.window.SetContent(u.files.content())
+
+	// A bar's Test and a listing run on the window's tally: wait for them
+	// before the driver goes away (#333).
+	t.Cleanup(u.settle)
 
 	return u.files
 }
@@ -80,22 +87,106 @@ func TestFilesActionsWaitForTheServer(t *testing.T) {
 	}
 }
 
-// A server that does not answer is named in the message, and the actions go
-// back to off.
-func TestTakeOfflineNamesTheAddress(t *testing.T) {
-	view := newTestFilesView(t, apiChoice{url: "https://eznit.example.com", source: "the saved address"})
+// A refused session is not a missing server: the API answered, so the tab drops
+// the token and asks again instead of leaving an empty library on screen (#335).
+func TestRefusedSessionReturnsToLogin(t *testing.T) {
+	u := newTestUI(t)
 
-	view.ready = true
-	view.takeOffline("https://eznit.example.com", &apiclient.APIError{Status: 401, Message: "no session"})
+	if err := config.Set("token", "dead-token"); err != nil {
+		t.Fatal(err)
+	}
+	u.client.Token = "dead-token"
 
-	if !strings.Contains(view.status.Text, "https://eznit.example.com") {
-		t.Errorf("status = %q, want the address that failed", view.status.Text)
+	library := u.tabs.Items[0].Content
+
+	u.files.failedToLoad("https://eznit.example.com", &apiclient.APIError{Status: 401, Message: "Invalid token"})
+
+	if _, err := config.Value("token"); err == nil {
+		t.Error("the refused token is still in the config file")
 	}
-	if !strings.Contains(view.status.Text, "Connect") {
-		t.Errorf("status = %q, want it to point at Connect", view.status.Text)
+	if u.client.Token != "" {
+		t.Errorf("client token = %q, want it cleared", u.client.Token)
 	}
-	if view.ready {
-		t.Error("the view is still ready after a failed load")
+	if findButton(u.tabs.Items[0].Content, "Log in") == nil {
+		t.Error("the Files tab does not offer to sign in again")
+	}
+	if u.tabs.Items[0].Content == library {
+		t.Error("the library is still on screen after the session ended")
+	}
+}
+
+// The rule is not applied by hand: a real listing answered with 401 must end
+// the session too, which is the wiring from the client's error to the tab.
+func TestRefusedListingGoesToLogin(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"status_code":401,"error":"Invalid token"}`))
+	}))
+	t.Cleanup(server.Close)
+
+	u := newTestUI(t)
+
+	if err := config.Set("token", "dead-token"); err != nil {
+		t.Fatal(err)
+	}
+
+	u.client = apiclient.New(server.URL)
+	u.client.Token = "dead-token"
+
+	u.files.refresh()
+
+	// Wait for the answer instead of polling the tree: the poll reads widgets
+	// the worker writes (the test driver runs fyne.Do inline), which was one of
+	// the races #333 recorded.
+	u.settle()
+
+	if findButton(u.tabs.Items[0].Content, "Log in") == nil {
+		t.Fatal("a refused listing did not bring the login card back")
+	}
+
+	if u.client.Token != "" {
+		t.Errorf("client token = %q, want it cleared", u.client.Token)
+	}
+}
+
+// A server that does not answer has said nothing about the token, so the
+// session stays and the tab shows the panel with both ways out (#335).
+func TestUnreachableServerKeepsTheSession(t *testing.T) {
+	u := newTestUI(t)
+
+	if err := config.Set("token", "live-token"); err != nil {
+		t.Fatal(err)
+	}
+	u.client.Token = "live-token"
+
+	u.files.failedToLoad("http://127.0.0.1:4321",
+		fmt.Errorf("%w: dial tcp 127.0.0.1:4321: connect: connection refused", apiclient.ErrUnreachable))
+
+	if stored, err := config.Value("token"); err != nil || stored != "live-token" {
+		t.Errorf("token = %q (%v), want it kept", stored, err)
+	}
+	if u.client.Token != "live-token" {
+		t.Errorf("client token = %q, want it kept", u.client.Token)
+	}
+
+	content := u.tabs.Items[0].Content
+	if findButton(content, "Try again") == nil {
+		t.Error("the not-connected panel has no Try again")
+	}
+
+	// The bar the panel shows is the one a later sync writes to, and it is in
+	// the tree: a detached bar would swallow every address typed into it.
+	if !holds(content, u.files.bar.entry) {
+		t.Error("the panel's address bar is not the one on screen")
+	}
+
+	u.local = false
+	u.address = apiChoice{url: "http://127.0.0.1:9999", source: "the address you entered"}
+	u.syncAddressBars()
+
+	if got := u.files.bar.entry.Text; got != "http://127.0.0.1:9999" {
+		t.Errorf("the tab's address bar shows %q, want the current address", got)
 	}
 }
 
@@ -223,6 +314,11 @@ func TestFilesAddressIsTypedAndConnected(t *testing.T) {
 
 	u.files.bar.entry.SetText("http://127.0.0.1:5000")
 	u.files.bar.connectTyped()
+
+	// The connect lands on the library, which starts a listing: let it finish
+	// before reading the window, or the worker's widget work overlaps this
+	// goroutine (#333).
+	u.settle()
 
 	stored, err := config.Value("api_url")
 	if err != nil || stored != "http://127.0.0.1:5000" {
