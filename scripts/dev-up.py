@@ -363,6 +363,81 @@ def host_port(name: str, default: int) -> int:
         raise SystemExit(1) from None
 
 
+GO_DIRECTIVE = re.compile(r"^\s*go\s+(\d+(?:\.\d+)+)\s*$", re.MULTILINE)
+GO_TOOLCHAIN = re.compile(r"go(\d+(?:\.\d+)+)")
+
+
+def go_mod_version() -> str:
+    """The `go` directive from go.mod: the toolchain the compiler enforces."""
+    gomod = REPO_ROOT / "go.mod"
+    if not gomod.is_file():
+        error(f"no go.mod at {gomod} - cannot tell which toolchain this checkout needs.")
+        raise SystemExit(1)
+    match = GO_DIRECTIVE.search(gomod.read_text(encoding="utf-8"))
+    if not match:
+        error("go.mod has no 'go' directive - cannot tell which toolchain this checkout needs.")
+        error("  Expected a line such as: go 1.27.4")
+        raise SystemExit(1)
+    return match.group(1)
+
+
+def version_lt(have: str, required: str) -> bool:
+    """Numeric, component by component: 1.27.10 > 1.27.9, and 1.27 == 1.27.0."""
+    left = [int(part) for part in have.split(".")]
+    right = [int(part) for part in required.split(".")]
+    width = max(len(left), len(right))
+    left += [0] * (width - len(left))
+    right += [0] * (width - len(right))
+    return left < right
+
+
+def sandbox_go_version(files: list[str]) -> str:
+    """Ask the image, not the host: the host Go is unrelated to the sandbox's."""
+    result = run_compose(
+        files,
+        ["run", "--rm", "--no-deps", "-T", "--entrypoint", "go", DEV_SERVICE, "version"],
+        capture=True,
+    )
+    if result.returncode != 0:
+        if result.stderr:
+            print(result.stderr, file=sys.stderr, end="")
+        error("could not read the dev image's Go version.")
+        error("  Fix the error above, or rebuild the image: dev-build")
+        raise SystemExit(1)
+    match = GO_TOOLCHAIN.search(result.stdout or "")
+    if not match:
+        error("could not parse the Go toolchain version from the sandbox.")
+        error("  Rebuild the image: dev-build")
+        raise SystemExit(1)
+    return match.group(1)
+
+
+def check_dev_toolchain(files: list[str]) -> bool:
+    """Refuse an image older than go.mod instead of failing inside the logs.
+
+    `dev-up` does not rebuild (#103), so after a Go pin bump Compose starts the
+    image that predates it and the API dies with
+    `go: go.mod requires go >= X (running go Y; GOTOOLCHAIN=local)` - a message
+    that names neither the cause nor the repair (#322). The Makefile calls the
+    same check through scripts/check-dev-toolchain.sh; this is the native
+    Windows path, where no bash exists.
+    """
+    required = go_mod_version()
+    have = sandbox_go_version(files)
+    if version_lt(have, required):
+        error(f"the dev sandbox image has Go {have}, but go.mod requires >= {required}.")
+        error("")
+        error("The image predates the pin bump in go.mod. dev-up does not rebuild")
+        error("images on purpose, so it would start this one and the API would die in")
+        error("the log stream with:")
+        error(f"  go: go.mod requires go >= {required} (running go {have}; GOTOOLCHAIN=local)")
+        error("")
+        error("Repair: dev-build")
+        return False
+    log(f"Go {have} satisfies go.mod (>= {required}).")
+    return True
+
+
 def preflight_ports(files: list[str]) -> bool:
     """Refuse to start the loop when the host ports belong to someone else.
 
@@ -474,6 +549,10 @@ def cmd_dev_up() -> int:
     preflight(require_agent=False)
     agent_note()
     files = AGENT_COMPOSE if agent_available() else BASE_COMPOSE
+    # A stale image must fail here, before anything starts: the API's own error
+    # arrives after two containers are up and reads like a source problem.
+    if not check_dev_toolchain(files):
+        return 1
     # Parity with the Makefile: the two entry points want the same host ports,
     # so this stops before starting half a stack.
     if not preflight_ports(files):
