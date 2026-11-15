@@ -53,6 +53,13 @@ jobs:
       - name: Test (fyne)
         run: go test -tags fyne ./...
 
+      # The window's suite is the only place a data race can hide behind the
+      # test driver, which runs fyne.Do inline on the calling goroutine: plain
+      # `go test` reports nothing, the detector reports the overlap. This is the
+      # gate that keeps the package at zero instead of accumulating (#333).
+      - name: Test with the race detector (fyne)
+        run: go test -race -tags "fyne ci" -count=1 ./internal/fyneui/
+
       - name: Build the window
         run: go build -tags fyne -o /tmp/eznit-gui ./cmd/gui
 
