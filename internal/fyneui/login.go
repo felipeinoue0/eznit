@@ -3,7 +3,9 @@
 package fyneui
 
 import (
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"fyne.io/fyne/v2"
@@ -44,7 +46,7 @@ type loginView struct {
 	card fyne.CanvasObject
 }
 
-func newLoginView(u *ui, message string) *loginView {
+func newLoginView(u *ui, message string, kind statusKind) *loginView {
 	view := &loginView{
 		ui:      u,
 		local:   newCheckRow("Use this machine", nil),
@@ -53,9 +55,10 @@ func newLoginView(u *ui, message string) *loginView {
 		pass:    widget.NewPasswordEntry(),
 		confirm: widget.NewPasswordEntry(),
 		hint:    signupHint(),
-		status:  widget.NewLabel(message),
+		status:  widget.NewLabel(""),
 	}
 
+	view.setStatus(message, kind)
 	view.local.SetChecked(u.local)
 	view.local.OnChanged = func(bool) { view.syncServerField() }
 	view.syncServerField()
@@ -73,12 +76,11 @@ func newLoginView(u *ui, message string) *loginView {
 	return view
 }
 
-// signupHint is what an account needs, in the words the form uses: the API
-// refuses an empty password and a mismatch, and nothing else. Saying it up
-// front is the difference between a form that looks broken and one that asks
-// for exactly what it takes (#324).
+// signupHint is what an account needs, in the words the form uses: an address
+// and a password typed twice. One line, and no rule the form does not ask for —
+// the API refuses an empty password and a mismatch, and nothing else (#324).
 func signupHint() *widget.Label {
-	label := muted("Any email address, and a password typed twice. There is no minimum password length.")
+	label := muted("Any email, and a password typed twice.")
 	label.Alignment = fyne.TextAlignCenter
 	label.Wrapping = fyne.TextWrapWord
 
@@ -182,14 +184,17 @@ func (l *loginView) toggleMode() {
 	}
 
 	l.signup = !l.signup
-	l.setStatus("")
+	l.setStatus("", statusIdle)
 	l.ui.setFilesTab(l.content())
 }
 
-// setStatus writes the line under the form. A longer message makes the card
-// taller, and the card's rows were measured before the text arrived.
-func (l *loginView) setStatus(text string) {
+// setStatus writes the line under the form, in the colour its kind earns: a
+// refusal is the theme's error colour, so "something needs checking" is visible
+// before the sentence is read (#337).
+func (l *loginView) setStatus(text string, kind statusKind) {
+	l.status.Importance = statusImportance(kind)
 	l.status.SetText(text)
+
 	relayout(l.card)
 }
 
@@ -203,13 +208,13 @@ func (l *loginView) submit() {
 
 	switch {
 	case email == "":
-		l.setStatus("Enter the email address of your account.")
+		l.setStatus("Enter your email.", statusError)
 		return
 	case password == "":
-		l.setStatus("Enter the password.")
+		l.setStatus("Enter your password.", statusError)
 		return
 	case l.signup && password != l.confirm.Text:
-		l.setStatus("The two passwords do not match.")
+		l.setStatus("Passwords do not match.", statusError)
 		return
 	}
 
@@ -222,22 +227,22 @@ func (l *loginView) submit() {
 
 	base, err := apiclient.ValidateBaseURL(typed)
 	if err != nil {
-		l.setStatus(err.Error())
+		l.setStatus(err.Error(), statusError)
 		return
 	}
 
 	if err := l.ui.setLocal(l.local.Checked); err != nil {
-		l.setStatus("The choice of server could not be saved: " + err.Error())
+		l.setStatus("The choice of server could not be saved: "+err.Error(), statusError)
 		return
 	}
 
 	if err := config.Set("api_url", base); err != nil {
-		l.setStatus("The server address could not be saved: " + err.Error())
+		l.setStatus("The server address could not be saved: "+err.Error(), statusError)
 		return
 	}
 
 	l.busy = true
-	l.setStatus("Talking to " + base + "…")
+	l.setStatus("Talking to "+base+"…", statusPending)
 
 	signup := l.signup
 	confirm := l.confirm.Text
@@ -267,23 +272,28 @@ func (l *loginView) submit() {
 			l.busy = false
 
 			if err != nil {
-				if signedUp {
-					l.setStatus(signupNotSignedIn)
+				// The tailored line is for a refused pair after a signup —
+				// that is the case the server cannot name. Anything else (a
+				// server that went away between the two calls, a 5xx) gets
+				// its own sentence, because "already has an account" would be
+				// false (#337).
+				if signedUp && apiErrorStatus(err) == http.StatusUnauthorized {
+					l.setStatus(signupNotSignedIn, statusError)
 
 					return
 				}
 
-				l.setStatus(messageOf(err))
+				l.setStatus(loginMessage(base, err), statusError)
 				return
 			}
 
 			if token == "" {
-				l.setStatus("The server answered without a session token.")
+				l.setStatus("The server answered without a token.", statusError)
 				return
 			}
 
 			if err := config.Set("token", token); err != nil {
-				l.setStatus("The session could not be saved: " + err.Error())
+				l.setStatus("The session could not be saved: "+err.Error(), statusError)
 				return
 			}
 
@@ -296,13 +306,49 @@ func (l *loginView) submit() {
 	}()
 }
 
-// signupNotSignedIn is what a failed sign-in after a signup says. The API
+// signupNotSignedIn is what a refused sign-in after a signup says. The API
 // answers "user created!" for an address that already has an account — on
 // purpose, so signup cannot be used to discover one — and then the login with
 // the password just typed is what fails. "invalid credentials" is true and
-// useless; this says what to do without naming which of the two cases it is.
-const signupNotSignedIn = "The signup went through, but the sign-in did not. " +
-	"If this address already has an account, log in with that account's password instead."
+// useless; this names the likely case and the way out. It is used for a 401
+// only: a signup followed by a server that went away gets its own sentence.
+const signupNotSignedIn = "That email already has an account. Log in with its password."
+
+// loginMessage is the one line a failed sign-in gets. A refused pair is named
+// plainly — the server refuses to say which half was wrong, so neither does the
+// card — and an instance that could not be reached is named by its address
+// rather than by the dial error behind it (#337).
+func loginMessage(base string, err error) string {
+	if apiErr, ok := err.(*apiclient.APIError); ok {
+		if apiErr.Status == http.StatusUnauthorized {
+			return "Wrong email or password."
+		}
+
+		if apiErr.Message != "" {
+			return apiErr.Message
+		}
+
+		return fmt.Sprintf("The server answered %d.", apiErr.Status)
+	}
+
+	if errors.Is(err, apiclient.ErrUnreachable) {
+		return "Cannot reach " + base + "."
+	}
+
+	return err.Error()
+}
+
+// apiErrorStatus is the status an error carried, or 0 when the request never
+// got an answer. A refusal and a server that is not there are different
+// answers, and only one of them says anything about the session.
+func apiErrorStatus(err error) int {
+	apiErr, ok := err.(*apiclient.APIError)
+	if !ok {
+		return 0
+	}
+
+	return apiErr.Status
+}
 
 // messageOf is the one line a person needs: the host's message when there is
 // one, the error otherwise.

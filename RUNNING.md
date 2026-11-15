@@ -121,7 +121,9 @@ the same one:
 - **Use this machine** is the default and is remembered: checked, the field
   shows the server the Server tab would run, on the port that folder's
   configuration names, and is shut; unchecked, the field takes any address.
-- **Connect** validates the address and switches to it, remembering it.
+- **Connect** validates the address and switches to it, remembering it. It is
+  not a login: with no session in the window the Files tab keeps its login card,
+  whatever address was connected to.
 - **Test** asks the address `/v1/healthcheck` without saving it.
 - The source line under the checkbox names where the address came from: this
   machine, `-api`, `GUI_API_URL`, or an address you typed.
@@ -135,12 +137,20 @@ The address is resolved as `-api`, then `GUI_API_URL`, then the address saved in
 server that issued it: changing to a different host asks first, then signs you
 out; a port change on one host keeps the session.
 
+A failed listing is read by its answer. A `401` means the API refused the token,
+so the session is forgotten and the login card comes back; a server that does not
+answer keeps the token and shows a **Cannot reach this server** panel with
+**Try again** and the address bar above it — stopping a server you started is
+not a sign-out, and a server that comes back needs no password. Sign-in failures
+are one sentence in the theme's error colour: `Wrong email or password.`,
+`Passwords do not match.`, `Cannot reach http://…`.
+
 The **Templates** tab reads that server's catalogue: filter by kind or down to
-your own templates, then select a row. The table is Name, Kind, Version and
-Files; the selected template's summary adds its visibility, owner and
-description, and three tabs — **Files**, **Variables**, **Commands**, each
-labelled with its count — hold the contents, every line selectable. Two actions
-sit beside the summary:
+your own templates, **Refresh** to read it again, then select a row. The table is
+Name, Kind, Version and Files; the selected template's summary adds its
+visibility, owner and description, and three tabs — **Files**, **Variables**,
+**Commands**, each labelled with its count — hold the contents, every line
+selectable. Two actions sit beside the summary:
 
 - **Save as bundle…** writes the `.eznit` file that `eznit template apply
   --from-file` reads; it is the same file `template export` produces, from the

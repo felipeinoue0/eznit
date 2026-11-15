@@ -4,6 +4,7 @@ package fyneui
 
 import (
 	"fmt"
+	"net/http"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -195,12 +196,14 @@ func (v *filesView) content() fyne.CanvasObject {
 	return v.built
 }
 
-// setStatus writes the one line under the table and colours the dot with it.
+// setStatus writes the one line under the table, colours the dot with it, and
+// colours the words: a red dot and grey text is half an error message.
 func (v *filesView) setStatus(text string, kind statusKind) {
 	if v.status == nil {
 		return
 	}
 
+	v.status.Importance = statusImportance(kind)
 	v.status.SetText(text)
 
 	if v.dot != nil {
@@ -327,16 +330,27 @@ func (v *filesView) copySelectedDetails() {
 
 // refresh reloads the library. The request runs off the UI goroutine and the
 // widgets are touched only inside fyne.Do.
+//
+// The client is captured before the request: a connect can replace u.client
+// while a listing is in flight, and an answer that arrives for the previous
+// instance must not be applied to the new one — a 401 from the old server would
+// otherwise end a session the new one still honours.
 func (v *filesView) refresh() {
-	address := v.ui.client.BaseURL
+	client := v.ui.client
+	address := client.BaseURL
+
 	v.setStatus("Loading your files from "+address+"…", statusPending)
 
 	go func() {
-		files, err := v.ui.client.ListFiles()
+		files, err := client.ListFiles()
 
 		fyne.Do(func() {
+			if v.ui.client != client {
+				return
+			}
+
 			if err != nil {
-				v.takeOffline(address, err)
+				v.failedToLoad(address, err)
 				return
 			}
 
@@ -357,18 +371,55 @@ func (v *filesView) refresh() {
 	}()
 }
 
-// takeOffline is the answer to a server that did not answer: say which address
-// failed and what to do about it, and switch the actions off.
-func (v *filesView) takeOffline(address string, err error) {
-	v.ready = false
+// failedToLoad routes a listing that did not arrive. The two failures are not
+// the same answer: a refused token means the API judged the session and said
+// no, so the window forgets it and asks again; an unreachable server has said
+// nothing about the token, so the session stays and the panel says so (#335).
+//
+// What neither does is leave the library on screen: a table with no rows and a
+// grey line under it reads as "signed in, nothing here", which is the opposite
+// of the truth.
+func (v *filesView) failedToLoad(address string, err error) {
+	if apiErrorStatus(err) == http.StatusUnauthorized {
+		v.ui.forgetSession(sessionEnded)
+
+		return
+	}
+
+	v.ui.showUnreachable(address, err)
+}
+
+// unreachableContent is the tab when the server did not answer: the same
+// address bar as the library — so another address can be typed and connected —
+// the panel that explains the state, and a status line of its own.
+//
+// The status line is the panel's, not the library's: the library's line sits in
+// a container the tab no longer shows, so a Test or a refused address would
+// answer into a label nobody can see.
+func (v *filesView) unreachableContent(address string, cause error) fyne.CanvasObject {
+	panel := newUnreachableView(v.ui, address, cause)
+
+	v.bar = newAddressBar(v.ui, panel.setStatus, true)
+	header := container.NewVBox(v.bar.content(), widget.NewSeparator())
+
+	return container.NewBorder(header, statusBar(panel.dot, panel.status), nil, nil, panel.content())
+}
+
+// forget drops the rows. They belong to the session that just ended, and the
+// next one may be a different account: a stale table would show the last
+// account's files until the listing returns.
+func (v *filesView) forget() {
 	v.files = nil
 	v.selected = -1
+	v.ready = false
+
+	if v.table == nil {
+		return
+	}
+
+	v.table.UnselectAll()
 	v.table.Refresh()
 	v.updateActions()
-
-	v.setStatus(fmt.Sprintf(
-		"The server at %s did not answer (%s). Type another address above and Connect, or Refresh to try again.",
-		address, messageOf(err)), statusError)
 }
 
 func (v *filesView) uploadFile() {

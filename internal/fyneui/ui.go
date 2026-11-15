@@ -239,8 +239,13 @@ func (u *ui) connect(choice apiChoice) (bool, error) {
 
 	u.syncAddressBars()
 
-	if signedOut {
-		u.showLogin("Pointing at " + choice.url + ". Sign in — a session belongs to the server that issued it.")
+	// A connect is not a login. Connecting from the Templates tab with no
+	// session used to put the empty library in front of a window that had
+	// nothing to fill it with, and the tab only said so after a request failed
+	// (#336). The message names the address, because the card's own field is
+	// where a wrong one gets fixed.
+	if signedOut || u.client.Token == "" {
+		u.showLogin("Sign in to " + choice.url + ".")
 
 		return true, nil
 	}
@@ -315,7 +320,25 @@ func (u *ui) showMain() {
 // showLogin puts the sign-in form in the Files tab. The window keeps its other
 // tabs: a signed-out user can still run a local server from here.
 func (u *ui) showLogin(message string) {
-	u.setFilesTab(newLoginView(u, message).content())
+	u.showLoginWith(message, statusIdle)
+}
+
+// showLoginWith is showLogin with the colour the message earns: a session that
+// could not be forgotten is an error, and the card should not say it in the
+// same grey as "you are signed out".
+func (u *ui) showLoginWith(message string, kind statusKind) {
+	u.setFilesTab(newLoginView(u, message, kind).content())
+}
+
+// showUnreachable puts the Files tab's "cannot reach" panel in place. The
+// session is kept: a server that is not there has said nothing about the token.
+func (u *ui) showUnreachable(address string, cause error) {
+	content := u.files.unreachableContent(address, cause)
+	u.setFilesTab(content)
+
+	// The panel's card is measured before it has a width, and a sentence that
+	// wraps is taller than one line: lay it out again now that it has one.
+	relayout(content)
 }
 
 // setFilesTab replaces the first tab's content. The tab itself stays, so the
@@ -325,22 +348,36 @@ func (u *ui) setFilesTab(content fyne.CanvasObject) {
 	u.tabs.Refresh()
 }
 
+// sessionEnded is what a refused token says. The API answered — with "not a
+// session I issued" — so the window stops pretending and asks again.
+const sessionEnded = "Your session ended. Sign in again."
+
 // signOut forgets the session token and only the token: the API address and
 // the git-host tokens stay. The catalogue is per account, so it is dropped too:
 // a signed-out window should not keep showing a private template.
 func (u *ui) signOut() {
+	u.forgetSession("You are signed out.")
+}
+
+// forgetSession is signOut for a caller with its own sentence: the API refused
+// the token, and the reason belongs on the card rather than in a log.
+func (u *ui) forgetSession(message string) {
 	if err := config.Remove("token"); err != nil {
-		u.showLogin("The session could not be forgotten: " + err.Error())
+		u.showLoginWith("The session could not be forgotten: "+err.Error(), statusError)
 		return
 	}
 
 	u.client.Token = ""
 
+	if u.files != nil {
+		u.files.forget()
+	}
+
 	if u.templates != nil {
 		u.templates.forget()
 	}
 
-	u.showLogin("You are signed out.")
+	u.showLogin(message)
 }
 
 // copyToClipboard puts text where a person can paste it. It reports whether a

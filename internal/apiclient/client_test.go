@@ -141,8 +141,16 @@ func TestHealth(t *testing.T) {
 		address := server.URL
 		server.Close()
 
-		if err := New(address).Health(); err == nil {
-			t.Error("Health() against a closed server = nil, want an error")
+		err := New(address).Health()
+		if err == nil {
+			t.Fatal("Health() against a closed server = nil, want an error")
+		}
+
+		// The window tells "the server is not there" from "the server said no"
+		// by this sentinel, so a refusal and a transport failure must not be
+		// the same error (#335).
+		if !errors.Is(err, ErrUnreachable) {
+			t.Errorf("Health() = %v, want ErrUnreachable in the chain", err)
 		}
 	})
 }

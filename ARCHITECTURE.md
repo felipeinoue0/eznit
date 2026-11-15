@@ -316,9 +316,20 @@ explicit override is not "this machine". `apiclient.ValidateBaseURL` and
 `SameHost` decide whether a typed address is usable and whether a session token
 still belongs to it: a different host means a different instance, so the token
 is forgotten — after a confirmation — and the login form follows, while a port
-change on one host keeps the session. The tab's actions stay disabled until
-`/v1/healthcheck` has answered through a listing, so a wrong address cannot look
-like an empty library.
+change on one host keeps the session. A **Connect** is not a login: with no
+token in the window it lands on the login form whatever address it names, so the
+Files tab never shows a library it has nothing to fill. The tab's actions stay
+disabled until a listing has answered, so a wrong address cannot look like an
+empty library.
+
+A failed listing is read by its answer, not only by its arrival. `401` means the
+API judged the token and refused it, so the window forgets the session and the
+login form follows; anything else — no answer, a 5xx — leaves the token alone
+and puts a **Cannot reach this server** panel in the tab, with **Try again** and
+the address bar still above it. The panel exists because a table with no rows
+and a status line under it reads as "signed in, nothing here", which is exactly
+what the window cannot know. `apiclient.ErrUnreachable` is what separates the two
+cases in Go.
 
 The session belongs to the Files tab: it is the tab that shows the login form
 when there is no token, and its header carries **Sign out**. Signing out removes

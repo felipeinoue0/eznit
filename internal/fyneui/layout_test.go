@@ -282,7 +282,7 @@ func TestFilesTabTextDoesNotOverlap(t *testing.T) {
 			view.selected = 0
 			view.ready = true
 			view.updateActions()
-			view.setStatus("The server at http://a-very-long-server-name.example.com:4000 did not answer (the API could not be reached). Type another address above and Connect, or Refresh to try again.", statusError)
+			view.setStatus("The upload failed: the server at http://a-very-long-server-name.example.com:4000 answered 413 — the file is larger than this instance accepts.", statusError)
 
 			layOut(view.ui.window, size)
 			assertNoTextOverlap(t, view.ui.window.Content())
@@ -308,7 +308,7 @@ func TestTemplatesTabTextDoesNotOverlap(t *testing.T) {
 			view.table.Refresh()
 			view.showDetail(detail)
 			view.updateActions()
-			view.setStatus("The catalogue could not be loaded from http://a-very-long-server-name.example.com:4000 (the API could not be reached). Use Refresh to try again, or change the address on the Files tab.", statusError)
+			view.setStatus("Cannot load the catalogue from http://a-very-long-server-name.example.com:4000 — the server did not answer, or that address is not an eznit instance.", statusError)
 
 			layOut(view.ui.window, size)
 			assertNoTextOverlap(t, view.ui.window.Content())
