@@ -76,7 +76,10 @@ func newAddressBar(u *ui, report func(text string, kind statusKind), withSignOut
 }
 
 // content lays the bar out: the local choice and the source on their own line,
-// the address and its actions below.
+// the address across the whole width, and its actions under it. The address
+// used to share a row with the caption and every action, which made the field
+// the leftover of the bar — at the window's own minimum width a long address
+// was clipped (#325).
 func (b *addressBar) content() fyne.CanvasObject {
 	actions := []fyne.CanvasObject{b.test, b.connect}
 
@@ -84,10 +87,11 @@ func (b *addressBar) content() fyne.CanvasObject {
 		actions = append(actions, widget.NewSeparator(), b.signOut)
 	}
 
-	line := container.NewBorder(nil, nil, muted("Server"), container.NewHBox(actions...), b.entry)
 	head := container.NewBorder(nil, nil, b.local.row, b.source, nil)
+	address := container.NewBorder(nil, nil, muted("Server"), nil, b.entry)
+	line := container.NewBorder(nil, nil, nil, container.NewHBox(actions...), nil)
 
-	return container.NewPadded(container.NewVBox(head, line))
+	return container.NewPadded(container.NewVBox(head, address, line))
 }
 
 // sync reads the current mode and address into the widgets.

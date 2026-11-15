@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 )
 
@@ -49,13 +50,26 @@ func TestLoginHasOnePrimaryAction(t *testing.T) {
 	}
 }
 
-// The local choice belongs beside the address field it fills in, not on a row
-// of its own under the form.
-func TestLoginPutsThisMachineBesideTheServerField(t *testing.T) {
+// The local choice belongs with the address field it fills in — under it,
+// inside the same cell, so the field keeps the card's width — not on a row of
+// its own apart from the form.
+func TestLoginPutsThisMachineWithTheServerField(t *testing.T) {
 	view := newTestLogin(t, false)
+	view.local.SetChecked(false)
+	view.ui.window.Content().Resize(fyne.NewSize(980, 640))
+	relayout(view.ui.window.Content())
 
 	if !sharesParent(view.ui.tabs.Items[0].Content, view.api, view.local.row) {
-		t.Error("'Use this machine' is not in the same row as the Server field")
+		t.Error("'Use this machine' is not in the Server field's cell")
+	}
+
+	if view.local.row.Position().Y <= view.api.Position().Y {
+		t.Error("'Use this machine' is beside the Server field; it belongs under it")
+	}
+
+	if view.api.Size().Width <= view.local.row.MinSize().Width {
+		t.Errorf("the address field is %.0f px wide, no wider than the choice beside it",
+			view.api.Size().Width)
 	}
 
 	view.local.SetChecked(true)
@@ -66,6 +80,25 @@ func TestLoginPutsThisMachineBesideTheServerField(t *testing.T) {
 
 	if got := view.api.Text; got != view.ui.localAddress() {
 		t.Errorf("address = %q, want this machine's %q", got, view.ui.localAddress())
+	}
+}
+
+// The address field is wide enough for the address a person types: at 176 px
+// it cut off a LAN address on one row beside "Use this machine" (#325).
+func TestLoginServerFieldShowsTheWholeAddress(t *testing.T) {
+	const address = "http://192.168.100.200:4000"
+
+	view := newTestLogin(t, false)
+	view.local.SetChecked(false)
+	view.api.SetText(address)
+
+	view.ui.window.Content().Resize(fyne.NewSize(980, 640))
+	relayout(view.ui.window.Content())
+
+	need := fyne.MeasureText(address, theme.TextSize(), fyne.TextStyle{}).Width + 2*theme.Padding()
+
+	if got := view.api.Size().Width; got < need {
+		t.Errorf("the address field is %.0f px wide, needs %.0f for %q", got, need, address)
 	}
 }
 

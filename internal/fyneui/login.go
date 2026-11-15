@@ -96,7 +96,10 @@ func (l *loginView) content() fyne.CanvasObject {
 		fyne.TextAlignCenter, fyne.TextStyle{})
 	subtitle.Selectable = true
 
-	serverRow := container.NewBorder(nil, nil, l.local.row, nil, l.api)
+	// The address takes the card's width and the local choice sits under it:
+	// side by side inside a 440 px card the checkbox left the field about
+	// 170 px, which clips almost every address (#325).
+	serverRow := container.NewVBox(l.api, l.local.row)
 
 	rows := []formRow{
 		{caption: "Server", input: serverRow},
