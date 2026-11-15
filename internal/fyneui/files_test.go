@@ -3,6 +3,7 @@
 package fyneui
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -80,22 +81,61 @@ func TestFilesActionsWaitForTheServer(t *testing.T) {
 	}
 }
 
-// A server that does not answer is named in the message, and the actions go
-// back to off.
-func TestTakeOfflineNamesTheAddress(t *testing.T) {
-	view := newTestFilesView(t, apiChoice{url: "https://eznit.example.com", source: "the saved address"})
+// A refused session is not a missing server: the API answered, so the tab drops
+// the token and asks again instead of leaving an empty library on screen (#335).
+func TestRefusedSessionReturnsToLogin(t *testing.T) {
+	u := newTestUI(t)
 
-	view.ready = true
-	view.takeOffline("https://eznit.example.com", &apiclient.APIError{Status: 401, Message: "no session"})
+	if err := config.Set("token", "dead-token"); err != nil {
+		t.Fatal(err)
+	}
+	u.client.Token = "dead-token"
 
-	if !strings.Contains(view.status.Text, "https://eznit.example.com") {
-		t.Errorf("status = %q, want the address that failed", view.status.Text)
+	u.files.failedToLoad("https://eznit.example.com", &apiclient.APIError{Status: 401, Message: "Invalid token"})
+
+	if _, err := config.Value("token"); err == nil {
+		t.Error("the refused token is still in the config file")
 	}
-	if !strings.Contains(view.status.Text, "Connect") {
-		t.Errorf("status = %q, want it to point at Connect", view.status.Text)
+	if u.client.Token != "" {
+		t.Errorf("client token = %q, want it cleared", u.client.Token)
 	}
-	if view.ready {
-		t.Error("the view is still ready after a failed load")
+	if findButton(u.tabs.Items[0].Content, "Log in") == nil {
+		t.Error("the Files tab does not offer to sign in again")
+	}
+}
+
+// A server that does not answer has said nothing about the token, so the
+// session stays and the tab shows the panel with both ways out (#335).
+func TestUnreachableServerKeepsTheSession(t *testing.T) {
+	u := newTestUI(t)
+
+	if err := config.Set("token", "live-token"); err != nil {
+		t.Fatal(err)
+	}
+	u.client.Token = "live-token"
+
+	u.files.failedToLoad("http://127.0.0.1:4321",
+		fmt.Errorf("%w: dial tcp 127.0.0.1:4321: connect: connection refused", apiclient.ErrUnreachable))
+
+	if stored, err := config.Value("token"); err != nil || stored != "live-token" {
+		t.Errorf("token = %q (%v), want it kept", stored, err)
+	}
+	if u.client.Token != "live-token" {
+		t.Errorf("client token = %q, want it kept", u.client.Token)
+	}
+
+	if findButton(u.tabs.Items[0].Content, "Try again") == nil {
+		t.Error("the not-connected panel has no Try again")
+	}
+
+	// The panel rebuilds the tab's own bar, so a later sync still lands: a
+	// detached bar would swallow the next Connect.
+	u.local = false
+	u.address = apiChoice{url: "http://127.0.0.1:9999", source: "the address you entered"}
+	u.syncAddressBars()
+
+	if got := u.files.bar.entry.Text; got != "http://127.0.0.1:9999" {
+		t.Errorf("the tab's address bar shows %q, want the current address", got)
 	}
 }
 

@@ -4,6 +4,7 @@ package fyneui
 
 import (
 	"fmt"
+	"net/http"
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
@@ -195,13 +196,16 @@ func (v *filesView) content() fyne.CanvasObject {
 	return v.built
 }
 
-// setStatus writes the one line under the table and colours the dot with it.
+// setStatus writes the one line under the table, colours the dot with it, and
+// colours the words: a red dot and grey text is half an error message.
 func (v *filesView) setStatus(text string, kind statusKind) {
 	if v.status == nil {
 		return
 	}
 
+	v.status.Importance = statusImportance(kind)
 	v.status.SetText(text)
+	v.status.Refresh()
 
 	if v.dot != nil {
 		v.dot.FillColor = statusColour(v.ui.app.Settings().ThemeVariant(), kind)
@@ -336,7 +340,7 @@ func (v *filesView) refresh() {
 
 		fyne.Do(func() {
 			if err != nil {
-				v.takeOffline(address, err)
+				v.failedToLoad(address, err)
 				return
 			}
 
@@ -357,18 +361,30 @@ func (v *filesView) refresh() {
 	}()
 }
 
-// takeOffline is the answer to a server that did not answer: say which address
-// failed and what to do about it, and switch the actions off.
-func (v *filesView) takeOffline(address string, err error) {
-	v.ready = false
-	v.files = nil
-	v.selected = -1
-	v.table.Refresh()
-	v.updateActions()
+// failedToLoad routes a listing that did not arrive. The two failures are not
+// the same answer: a refused token means the API judged the session and said
+// no, so the window forgets it and asks again; an unreachable server has said
+// nothing about the token, so the session stays and the panel says so (#335).
+//
+// What neither does is leave the library on screen: a table with no rows and a
+// grey line under it reads as "signed in, nothing here", which is the opposite
+// of the truth.
+func (v *filesView) failedToLoad(address string, err error) {
+	if apiErrorStatus(err) == http.StatusUnauthorized {
+		v.ui.forgetSession(sessionEnded)
 
-	v.setStatus(fmt.Sprintf(
-		"The server at %s did not answer (%s). Type another address above and Connect, or Refresh to try again.",
-		address, messageOf(err)), statusError)
+		return
+	}
+
+	v.ui.showUnreachable(address, err)
+}
+
+// unreachableContent is the tab when the server did not answer: the same
+// address bar as the library — so another address can be typed and connected —
+// and the panel that explains the state.
+func (v *filesView) unreachableContent(address string, cause error) fyne.CanvasObject {
+	return container.NewBorder(v.header(), nil, nil, nil,
+		newUnreachableView(v.ui, address, cause).content())
 }
 
 func (v *filesView) uploadFile() {

@@ -152,6 +152,26 @@ func newTestUI(t *testing.T) *ui {
 	return u
 }
 
+// A connect is not a login: connecting from another tab with no session leaves
+// the Files tab asking for one, rather than showing a library it cannot fill
+// (#336).
+func TestConnectWithoutASessionShowsLogin(t *testing.T) {
+	u := newTestUI(t)
+
+	signedOut, err := u.connect(apiChoice{url: "http://127.0.0.1:4321", source: "the address you entered"})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !signedOut {
+		t.Error("a connect without a session did not report a sign-out")
+	}
+
+	if findButton(u.tabs.Items[0].Content, "Log in") == nil {
+		t.Error("the Files tab shows no login card after a connect without a session")
+	}
+}
+
 // A session belongs to the Files tab: that is the tab the login form replaces,
 // so that is where signing out belongs. It forgets the token and the catalogue,
 // and keeps the address and the host tokens.
