@@ -39,6 +39,18 @@ set -euo pipefail
 DEV_DIR="${DEV_DIR:-/workspace}"
 SLEEP_ON_IDLE="${SLEEP_ON_IDLE:-true}"
 
+# --- Toolchain gate -----------------------------------------------------------
+# `dev-up` never rebuilds (#103), so this container can be a stale image whose
+# Go toolchain predates go.mod. Everything below then fails with a message that
+# names neither the cause nor the repair, so refuse here instead (#322). The
+# same check runs from `make dev-up` before anything starts; this half covers the
+# raw `docker compose up dev web-dev db migrate` path. Called through bash
+# because a Windows checkout does not preserve the executable bit.
+if ! bash "${DEV_DIR}/scripts/check-dev-toolchain.sh" --local; then
+    echo "[dev] Fix the host image, then restart: make dev-build" >&2
+    exit 1
+fi
+
 # --- Passwd entry for the runtime user ---------------------------------------
 if ! getent passwd "$(id -u)" >/dev/null; then
     if [[ "$(id -u)" -eq 0 ]]; then

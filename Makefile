@@ -716,7 +716,8 @@ help: ## List the available targets
 	@printf '\n  %s\n' "dev-up is the dev loop: UI :5173 (Vite, hot reload) and API :4000, both"
 	@printf '  %s\n' "from the source. make up is the product: same ports, built images."
 	@printf '  %s\n' "dev-up does not rebuild: run make dev-build after a Dockerfile or entrypoint"
-	@printf '  %s\n' "change. dev-restart is dev-down followed by dev-up."
+	@printf '  %s\n' "change. dev-restart is dev-down followed by dev-up. A stale image (a Go pin"
+	@printf '  %s\n' "bump in go.mod) is refused with that instruction instead of being started."
 
 # --- One-time local setup ---------------------------------------------------
 # Creates the two local files the stack needs, from the committed examples:
@@ -797,7 +798,7 @@ opencode-upgrade: ## Upgrade host opencode and refresh the dev sandbox
 # HOST_UID/HOST_GID need no explicit export here: docker-compose.yml defaults
 # them, and the exported values above supply the host's real identity when make
 # is running on the host. Only the GitHub token is resolved at up-time.
-.PHONY: dev-up dev-down dev-restart dev-log dev-build dev-reset
+.PHONY: dev-up dev-down dev-restart dev-log dev-build dev-reset check-dev-toolchain
 
 # dev-up is the developer loop, all of it: the API runs inside the sandbox
 # against the source, and the UI is the Vite server in `web-dev`, with hot
@@ -822,8 +823,18 @@ opencode-upgrade: ## Upgrade host opencode and refresh the dev sandbox
 # unaffected. What stops being automatic is an edit to a Dockerfile or to a
 # script COPYed into the image — `make dev-build` is that path, and it exists
 # for exactly this reason.
+#
+# The consequence is that a Go pin bump leaves the old image on disk, and
+# starting it fails inside the log stream with a message that names neither the
+# cause nor the repair (#322). `check-dev-toolchain` is the gate that refuses
+# first: it asks the image what toolchain it carries and compares that with
+# go.mod. It is a prerequisite, not a warning, so `dev-up` exits non-zero before
+# starting anything and names `make dev-build`.
+check-dev-toolchain: ## Refuse a dev image whose Go toolchain is older than go.mod
+	@scripts/check-dev-toolchain.sh --image
+
 dev-up: MODE = dev
-dev-up: preflight preflight-ports ## Start the dev loop: UI :5173 (Vite, live reload), API :4000
+dev-up: preflight check-dev-toolchain preflight-ports ## Start the dev loop: UI :5173 (Vite, live reload), API :4000
 	@printf '\n  dev-up starts the developer loop in containers:\n'
 	@printf '    %-14s %s\n' "UI (Vite)" "http://localhost:$(WEB_PORT)   hot reload"
 	@printf '    %-14s %s\n' "API" "http://localhost:$(HOST_PORT)"
