@@ -9,6 +9,7 @@ import {
   listFiles,
   MAX_UPLOAD_BYTES,
   messageOf,
+  refused,
   shareFile,
   uploadFile,
 } from "../api";
@@ -16,7 +17,13 @@ import type { FileData } from "../types";
 
 const MAX_UPLOAD_MB = MAX_UPLOAD_BYTES / (1024 * 1024);
 
-export default function Files() {
+interface FilesProps {
+  // onSessionEnded is called when the API refuses the token: the page cannot
+  // fix that, so App drops the session and the login page says why.
+  onSessionEnded: () => void;
+}
+
+export default function Files({ onSessionEnded }: FilesProps) {
   // The token is read at render time. The top bar re-renders when the session
   // changes, and this route is reached from it, so the value here is the one
   // the request below will use.
@@ -41,9 +48,18 @@ export default function Files() {
           setError(null);
         }
       } catch (cause: unknown) {
-        if (!cancelled) {
-          setError(messageOf(cause));
+        if (cancelled) {
+          return;
         }
+
+        // A refusal is not a message under the page: the token is dead, and
+        // leaving the table up would say the session is fine (#339).
+        if (refused(cause)) {
+          onSessionEnded();
+          return;
+        }
+
+        setError(messageOf(cause));
       } finally {
         if (!cancelled) {
           setLoading(false);
@@ -54,13 +70,24 @@ export default function Files() {
     return () => {
       cancelled = true;
     };
-  }, [token]);
+  }, [token, onSessionEnded]);
 
   // reload re-reads the list after a change, so the page shows what the API
   // stored instead of a guess at it.
   async function reload(): Promise<void> {
     const response = await listFiles();
     setFiles(response.data ?? []);
+  }
+
+  // report is what a failed action says. A refused token is not a line under
+  // the page, it is the end of the session.
+  function report(cause: unknown): void {
+    if (refused(cause)) {
+      onSessionEnded();
+      return;
+    }
+
+    setError(messageOf(cause));
   }
 
   async function onUpload(event: ChangeEvent<HTMLInputElement>): Promise<void> {
@@ -82,7 +109,7 @@ export default function Files() {
       await reload();
       setError(null);
     } catch (cause: unknown) {
-      setError(messageOf(cause));
+      report(cause);
     } finally {
       setBusy(false);
       input.value = "";
@@ -94,7 +121,7 @@ export default function Files() {
       await downloadFile(file);
       setError(null);
     } catch (cause: unknown) {
-      setError(messageOf(cause));
+      report(cause);
     }
   }
 
@@ -109,7 +136,7 @@ export default function Files() {
       await reload();
       setError(null);
     } catch (cause: unknown) {
-      setError(messageOf(cause));
+      report(cause);
     } finally {
       setBusy(false);
     }
@@ -130,7 +157,7 @@ export default function Files() {
       await reload();
       setError(null);
     } catch (cause: unknown) {
-      setError(messageOf(cause));
+      report(cause);
     } finally {
       setBusy(false);
     }
