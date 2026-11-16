@@ -92,9 +92,9 @@ The browser covers the whole loop, no CLI needed:
 - **Files** — drag-and-drop upload, upload a new version, download, delete.
 - **Commands** — the script library templates reference.
 - **Run locally** — the exact CLI lines for this server, per shell.
-- **Settings** — point the page at another eznit server by URL (that server
-  lists this page in `CORS_ALLOWED_ORIGINS`),
-  with a live health check; each server keeps its own sign-in.
+- **Settings** — point the page at another eznit server by URL, with a live
+  health check; each server keeps its own sign-in (the server must allow this
+  page's origin — see *A UI on another origin* below).
 
 Sign up or log in on the page, or paste the token from `eznit login` into
 `localStorage` as `eznit.token`. The full set of screenshots is under
