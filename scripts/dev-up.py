@@ -658,11 +658,54 @@ def cmd_dev_exec() -> int:
     ).returncode
 
 
+def agent_loop_enabled() -> bool:
+    """AGENT_LOOP=0 keeps an agent target to the sandbox alone (#371)."""
+    return os.environ.get("AGENT_LOOP", "1").strip() != "0"
+
+
+def ensure_agent_loop() -> bool:
+    """Start the dev loop beside an agent, the way `make claude` does (#371).
+
+    A sandbox that is not running starts with the start marker, so it runs the
+    API instead of sleeping; `web-dev` is started if missing, with --no-deps so
+    it never touches a running sandbox — an agent session in it survives. A
+    sandbox started without the API is left alone and says how to get it.
+    """
+    files = AGENT_COMPOSE
+    if not preflight_ports(files):
+        return False
+
+    ui_port = host_port("WEB_PORT", 5173)
+    if _ps_field(files, DEV_SERVICE, "State") != "running":
+        log(f"starting the dev loop: API http://localhost:{host_port('HOST_PORT', 4000)}, UI http://localhost:{ui_port}")
+        DEV_START_MARKER.parent.mkdir(parents=True, exist_ok=True)
+        DEV_START_MARKER.touch()
+    elif not DEV_START_MARKER.exists():
+        log(f"note: this sandbox was started without the API, so the UI on :{ui_port} has nothing to talk to.")
+        log("      dev-restart starts it (and ends any agent session in the sandbox).")
+
+    ensure_sandbox_running()
+
+    if WEB_SERVICE not in running_services(files):
+        if run_compose(files, ["up", "-d", "--no-deps", WEB_SERVICE]).returncode == 0:
+            log(f"the UI is on http://localhost:{ui_port} (the first start installs its dependencies - give it a minute)")
+    return True
+
+
 def cmd_agent(name: str, mode: str, extra: list[str]) -> int:
-    """Run one agent inside the sandbox, starting the sandbox if needed."""
+    """Run one agent inside the sandbox, starting the sandbox if needed.
+
+    Unless AGENT_LOOP=0, the API and the UI start with it (#371): before, only
+    the sandbox started, idle, and http://localhost:5173 answered nothing.
+    """
     preflight()
     check_image()
-    ensure_sandbox_running()
+    if agent_loop_enabled():
+        if not ensure_agent_loop():
+            return 1
+    else:
+        log("AGENT_LOOP=0: the sandbox only - no API, no UI.")
+        ensure_sandbox_running()
 
     argv = [*AGENTS[name][mode], *extra]
     # Shell-quote so values such as `--model provider/model` survive the zsh -lc layer.
