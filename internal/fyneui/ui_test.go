@@ -141,10 +141,12 @@ func newTestUI(t *testing.T) *ui {
 	u.client = apiclient.New(u.address.url)
 	u.files = newFilesView(u)
 	u.templates = newTemplatesView(u)
+	u.shared = newSharedView(u)
 
 	u.tabs = container.NewAppTabs(
 		container.NewTabItem("Files", u.files.content()),
 		container.NewTabItem("Templates", u.templates.content()),
+		container.NewTabItem("Shared", u.shared.content()),
 		container.NewTabItem("About", u.aboutContent()),
 	)
 	u.window.SetContent(u.tabs)
@@ -156,6 +158,20 @@ func newTestUI(t *testing.T) *ui {
 	t.Cleanup(u.settle)
 
 	return u
+}
+
+// tabNamed finds a tab by its title, so a test does not depend on where the
+// tab sits: adding the Shared tab moved About (#368).
+func tabNamed(t *testing.T, u *ui, title string) *container.TabItem {
+	t.Helper()
+
+	for _, item := range u.tabs.Items {
+		if item.Text == title {
+			return item
+		}
+	}
+	t.Fatalf("no %q tab", title)
+	return nil
 }
 
 // A connect is not a login: connecting from another tab with no session leaves
