@@ -146,3 +146,28 @@ func TestGetFilesForUserAnswersAnEmptyListAsArray(t *testing.T) {
 		t.Errorf("the empty list encodes as %s, want %s", got, want)
 	}
 }
+
+func TestSplitName(t *testing.T) {
+	tests := []struct {
+		in       string
+		wantName string
+		wantExt  string
+	}{
+		{"notes.txt", "notes", "txt"},
+		{"archive.tar.gz", "archive.tar", "gz"},
+		// The extension repeated inside the name stays there: ReplaceAll
+		// used to strip both and store "notes" for this one.
+		{"notes.txt.txt", "notes.txt", "txt"},
+		{"a.md-guide.md", "a.md-guide", "md"},
+		{"Makefile", "Makefile", ""},
+		{".bashrc", "", "bashrc"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.in, func(t *testing.T) {
+			name, ext := splitName(tt.in)
+			if name != tt.wantName || ext != tt.wantExt {
+				t.Errorf("splitName(%q) = (%q, %q), want (%q, %q)", tt.in, name, ext, tt.wantName, tt.wantExt)
+			}
+		})
+	}
+}
