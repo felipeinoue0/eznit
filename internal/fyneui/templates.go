@@ -50,6 +50,12 @@ type templatesView struct {
 	refresh *widget.Button
 	export  *widget.Button
 	apply   *widget.Button
+	publish *widget.Button
+
+	// afterLoad is said instead of the template count when the next load
+	// succeeds: a publish reloads the catalogue, and its confirmation must not
+	// be replaced by "N template(s)".
+	afterLoad string
 
 	// bar is the API address: the same component the Files tab has, without a
 	// session to end.
@@ -146,6 +152,7 @@ func newTemplatesView(u *ui) *templatesView {
 	view.export = widget.NewButtonWithIcon("Save as bundle…", theme.DownloadIcon(), view.exportSelected)
 	view.apply = widget.NewButtonWithIcon("Apply…", theme.ConfirmIcon(), view.applySelected)
 	view.apply.Importance = widget.HighImportance
+	view.publish = widget.NewButtonWithIcon("Publish folder…", theme.UploadIcon(), view.publishFolder)
 
 	// The handler goes on after the first selection: SetSelected calls it, and
 	// a fetch during construction would race the tab that owns the status line.
@@ -173,7 +180,7 @@ func (v *templatesView) content() fyne.CanvasObject {
 	// before the bar that holds it.
 	v.dot = canvas.NewCircle(statusColour(v.ui.app.Settings().ThemeVariant(), statusIdle))
 
-	filters := container.NewHBox(muted("Kind"), v.kind, v.mine.row, layout.NewSpacer(), v.refresh)
+	filters := container.NewHBox(muted("Kind"), v.kind, v.mine.row, layout.NewSpacer(), v.publish, v.refresh)
 
 	v.buildDetail()
 	split := container.NewVSplit(v.table, v.detailPane())
@@ -300,8 +307,14 @@ func (v *templatesView) reload() {
 			v.showDetail(nil)
 			v.updateActions()
 
+			if note := v.afterLoad; note != "" {
+				v.afterLoad = ""
+				v.setStatus(note, statusOK)
+				return
+			}
+
 			if len(items) == 0 {
-				v.setStatus("No template matches. A shared file is not a template — publish a folder with `eznit template publish ./folder`.", statusOK)
+				v.setStatus("No template matches. A shared file is not a template — publish a folder with Publish folder… (or `eznit template publish ./folder`).", statusOK)
 				return
 			}
 

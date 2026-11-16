@@ -15,9 +15,9 @@ import (
 func layOutAbout(t *testing.T, u *ui) fyne.CanvasObject {
 	t.Helper()
 
-	scroll, ok := u.tabs.Items[2].Content.(*container.Scroll)
+	scroll, ok := tabNamed(t, u, "About").Content.(*container.Scroll)
 	if !ok {
-		t.Fatalf("the About tab is %T, want a scroll", u.tabs.Items[2].Content)
+		t.Fatalf("the About tab is %T, want a scroll", tabNamed(t, u, "About").Content)
 	}
 
 	about := scroll.Content
