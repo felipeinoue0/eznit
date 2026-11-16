@@ -697,9 +697,13 @@ export HOST_UID HOST_GID HOST_HOME HOST_PORT API_PORT WEB_PORT
 #
 #   opencode --auto            approves what is not explicitly denied; the
 #                              secret-file deny rules in opencode.json still apply
-#   claude --permission-mode auto
-#                              approves what its safety review allows; the deny
-#                              rules in .claude/settings.json still apply
+#   claude --dangerously-skip-permissions
+#                              no prompts — the container is the boundary, as for
+#                              codex-auto. Claude's Read/Edit deny rules for `.env`
+#                              in .claude/settings.json still apply (verified). It
+#                              asks once to accept bypass mode; the answer is kept
+#                              in its volume. For a reviewed middle ground:
+#                              CLAUDE_AUTO_CMD="claude --permission-mode auto"
 #   codex --sandbox danger-full-access
 #                              Codex's own sandbox (bubblewrap) cannot create a
 #                              namespace inside an unprivileged container, so the
@@ -714,7 +718,7 @@ export HOST_UID HOST_GID HOST_HOME HOST_PORT API_PORT WEB_PORT
 OPENCODE_CMD      ?= opencode
 OPENCODE_AUTO_CMD ?= opencode --auto
 CLAUDE_CMD        ?= claude
-CLAUDE_AUTO_CMD   ?= claude --permission-mode auto
+CLAUDE_AUTO_CMD   ?= claude --dangerously-skip-permissions
 CODEX_CMD         ?= codex --sandbox danger-full-access
 CODEX_AUTO_CMD    ?= codex --dangerously-bypass-approvals-and-sandbox
 AGENT_ARGS        ?=
