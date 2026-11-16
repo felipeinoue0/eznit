@@ -1,107 +1,317 @@
-import { useCallback, useState } from "react";
-import { Link, Route, Routes, useNavigate, useParams } from "react-router-dom";
-import { clearToken, getToken, setToken } from "./api";
+import { useEffect, useState } from "react";
+import type { ReactNode } from "react";
+import { Link, Navigate, NavLink, Route, Routes, useLocation, useParams } from "react-router-dom";
+import { checkHealth, serverLabel } from "./api";
+import type { Health } from "./api";
+import Icon from "./components/Icon";
+import type { IconName } from "./components/Icon";
 import Logo from "./components/Logo";
-import Catalogue from "./pages/Catalogue";
+import ThemeToggle from "./components/ThemeToggle";
+import { ConfirmProvider, ToastProvider } from "./components/ui";
+import Commands from "./pages/Commands";
+import Explore from "./pages/Explore";
 import Files from "./pages/Files";
 import Login from "./pages/Login";
+import MyTemplates from "./pages/MyTemplates";
+import RunLocally from "./pages/RunLocally";
+import Settings from "./pages/Settings";
 import Signup from "./pages/Signup";
 import TemplateDetailPage from "./pages/TemplateDetail";
+import TemplateEditor from "./pages/TemplateEditor";
+import { SessionProvider, useSession } from "./session";
 
-// sessionEnded is what the login page says when it is reached because the API
-// refused the token. One line, and the same one the desktop window uses.
-const sessionEnded = "Your session ended. Sign in again.";
+export default function App() {
+  return (
+    <SessionProvider>
+      <ToastProvider>
+        <ConfirmProvider>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/signup" element={<Signup />} />
+            <Route path="*" element={<Shell />} />
+          </Routes>
+        </ConfirmProvider>
+      </ToastProvider>
+    </SessionProvider>
+  );
+}
 
-// TemplateDetailPageRoute keys the detail page by the template it shows, so
-// moving from one template to another is a new page: the download state, the
-// copied flag and the refusal all start fresh, and a slow answer for the old
-// template cannot land on the new one.
-function TemplateDetailPageRoute() {
+// Keyed by the id, so moving from one template to another is a new page: the
+// state starts fresh, and a slow answer for the old one cannot land here.
+function TemplateDetailRoute() {
   const { id } = useParams<{ id: string }>();
   return <TemplateDetailPage key={id ?? ""} />;
 }
 
-export default function App() {
-  const navigate = useNavigate();
+function TemplateEditRoute() {
+  const { id } = useParams<{ id: string }>();
+  return <TemplateEditor key={id ?? "new"} id={id} />;
+}
 
-  // The token lives in localStorage; this state is only there so the top bar
-  // and the pages agree on whether there is a session right now.
-  const [token, setTokenState] = useState<string | null>(getToken);
-
-  function logIn(next: string): void {
-    setToken(next);
-    setTokenState(next);
+// RequireAuth sends a visitor to sign in, and back here afterwards.
+function RequireAuth({ children }: { children: ReactNode }) {
+  const { token, signedOutFrom } = useSession();
+  const location = useLocation();
+  if (token === null) {
+    if (signedOutFrom === location.pathname) {
+      return <Navigate to="/" replace />;
+    }
+    return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
+  return <>{children}</>;
+}
 
-  function logOut(): void {
-    clearToken();
-    setTokenState(null);
+function Shell() {
+  const { token, server } = useSession();
+  const location = useLocation();
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  // A navigation closes the drawer on a narrow screen. Keyed on the path, so
+  // the sidebar does not have to call back into here on every link.
+  const [lastPath, setLastPath] = useState(location.pathname);
+  if (lastPath !== location.pathname) {
+    setLastPath(location.pathname);
+    setMenuOpen(false);
   }
-
-  // endSession is logOut for the API's own answer: the token was refused, so
-  // the token goes, the top bar notices, and the login page says why. It is
-  // memoised because a page may call it from an effect.
-  const endSession = useCallback(() => {
-    logOut();
-    navigate("/login", { state: { message: sessionEnded } });
-  }, [navigate]);
 
   return (
-    <div className="app">
-      <header className="topbar">
-        <Link className="brand" to="/" aria-label="eznit">
-          {/* The mark is inlined as a component so currentColor follows the
-              theme; an <img>-loaded SVG isolates its document and made the
-              wordmark black-on-black on the dark default. The mark itself is
-              decorative, so the link that wraps it is what names it. */}
-          <Logo className="brand-logo" />
-        </Link>
-        <nav className="topnav">
-          <Link to="/">catalogue</Link>
-          {token === null ? (
-            <>
-              <Link to="/login">log in</Link>
-              <Link to="/signup">sign up</Link>
-            </>
-          ) : (
-            <>
-              <Link to="/files">files</Link>
-              <button className="linkbutton" type="button" onClick={logOut}>
-                log out
-              </button>
-            </>
-          )}
+    <div className={menuOpen ? "shell menu-open" : "shell"}>
+      <aside className="sidebar" aria-label="Main">
+        <div className="sidebar-top">
+          <Link className="brand" to="/" aria-label="eznit home">
+            <Logo className="brand-logo" />
+          </Link>
+        </div>
+
+        <nav className="nav">
+          <NavSection title="Discover">
+            <NavItem to="/" icon="compass" label="Explore" end />
+          </NavSection>
+
+          {token !== null ? (
+            <NavSection title="Workspace">
+              <NavItem to="/templates" icon="layers" label="My templates" />
+              <NavItem to="/files" icon="folder" label="Files" />
+              <NavItem to="/commands" icon="terminal" label="Commands" />
+            </NavSection>
+          ) : null}
+
+          <NavSection title="Use it">
+            <NavItem to="/local" icon="rocket" label="Run locally" />
+            <NavItem to="/settings" icon="settings" label="Settings" />
+          </NavSection>
         </nav>
-      </header>
 
-      <main className="main">
-        <Routes>
-          <Route path="/" element={<Catalogue />} />
-          {/* Keyed by the id, so moving to another template is a new page: the
-              refusal, the copied flag and the download state all start fresh,
-              and a slow answer for the old one cannot land here. */}
-          <Route path="/templates/:id" element={<TemplateDetailPageRoute />} />
-          {/* Keyed by the session, so a log-out — or a log-in as someone else —
-              starts from an empty table instead of the last account's rows.
-              A 401 would have the page look signed in for ever, so it tells
-              App to end the session instead. */}
-          <Route
-            path="/files"
-            element={<Files key={token ?? "anon"} onSessionEnded={endSession} />}
-          />
-          <Route path="/login" element={<Login onAuthenticated={logIn} />} />
-          <Route path="/signup" element={<Signup onAuthenticated={logIn} />} />
-          <Route
-            path="*"
-            element={<p className="empty">There is no such page. The catalogue is over here.</p>}
-          />
-        </Routes>
-      </main>
+        <div className="sidebar-bottom">
+          <ServerStatus key={server} server={server} />
+          <Account />
+        </div>
+      </aside>
 
-      <footer className="footer">
-        <span>eznit — self-hosted file storage</span>
-        <code>eznit template list</code>
-      </footer>
+      <div className="scrim" onClick={() => setMenuOpen(false)} aria-hidden="true" />
+
+      <div className="content">
+        <header className="mobilebar">
+          <button
+            type="button"
+            className="icon-btn"
+            aria-label="Open the menu"
+            aria-expanded={menuOpen}
+            onClick={() => setMenuOpen(true)}
+          >
+            <Icon name="menu" />
+          </button>
+          <Link to="/" aria-label="eznit home">
+            <Logo className="brand-logo" />
+          </Link>
+          <ThemeToggle compact />
+        </header>
+
+        <main className="main" id="main">
+          <Routes>
+            <Route path="/" element={<Explore />} />
+            <Route
+              path="/templates"
+              element={
+                <RequireAuth>
+                  <MyTemplates />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/templates/new"
+              element={
+                <RequireAuth>
+                  <TemplateEditor key="new" />
+                </RequireAuth>
+              }
+            />
+            <Route path="/templates/:id" element={<TemplateDetailRoute />} />
+            <Route
+              path="/templates/:id/edit"
+              element={
+                <RequireAuth>
+                  <TemplateEditRoute />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/files"
+              element={
+                <RequireAuth>
+                  {/* Keyed by the session, so a sign-in as someone else
+                      starts from an empty table, not the last account's. */}
+                  <Files key={`${server}|${token ?? ""}`} />
+                </RequireAuth>
+              }
+            />
+            <Route
+              path="/commands"
+              element={
+                <RequireAuth>
+                  <Commands key={`${server}|${token ?? ""}`} />
+                </RequireAuth>
+              }
+            />
+            <Route path="/local" element={<RunLocally />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </main>
+      </div>
+    </div>
+  );
+}
+
+function NavSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <div className="nav-section">
+      <div className="nav-title">{title}</div>
+      {children}
+    </div>
+  );
+}
+
+function NavItem({
+  to,
+  icon,
+  label,
+  end,
+}: {
+  to: string;
+  icon: IconName;
+  label: string;
+  end?: boolean;
+}) {
+  return (
+    <NavLink
+      to={to}
+      end={end}
+      className={({ isActive }) => (isActive ? "nav-item active" : "nav-item")}
+    >
+      <Icon name={icon} />
+      <span>{label}</span>
+    </NavLink>
+  );
+}
+
+// ServerStatus is the pill that says which server this UI talks to and
+// whether it answers. It re-checks every 30 seconds while the page is open.
+function ServerStatus({ server }: { server: string }) {
+  const [health, setHealth] = useState<Health | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const probe = async (): Promise<void> => {
+      const answer = await checkHealth(server);
+      if (!cancelled) {
+        setHealth(answer);
+      }
+    };
+    void probe();
+    const timer = window.setInterval(() => void probe(), 30000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [server]);
+
+  const state = health === null ? "checking" : health.ok ? "online" : "offline";
+  const title =
+    health === null
+      ? "Checking the server…"
+      : health.ok
+        ? `Online · ${health.ms} ms`
+        : (health.error ?? "Offline");
+
+  return (
+    <Link to="/settings" className={`server-pill server-${state}`} title={title}>
+      <span className="status-dot" aria-hidden="true" />
+      <span className="server-pill-text">
+        <span className="server-pill-host">{serverLabel(server)}</span>
+        <span className="server-pill-state">
+          {state === "checking" ? "Checking…" : state === "online" ? "Connected" : "Unreachable"}
+        </span>
+      </span>
+      <Icon name="server" size={16} className="muted" />
+    </Link>
+  );
+}
+
+function Account() {
+  const { token, email, signOut } = useSession();
+
+  if (token === null) {
+    return (
+      <div className="account">
+        <Link to="/login" className="btn btn-primary btn-block">
+          Sign in
+        </Link>
+        <ThemeToggle />
+      </div>
+    );
+  }
+
+  const initial = (email ?? "?").charAt(0).toUpperCase();
+  return (
+    <div className="account">
+      <div className="account-row">
+        <span className="avatar" aria-hidden="true">
+          {initial}
+        </span>
+        <span className="account-email" title={email ?? undefined}>
+          {email ?? "Signed in"}
+        </span>
+        <button
+          type="button"
+          className="icon-btn"
+          aria-label="Sign out"
+          title="Sign out"
+          onClick={() => void signOut()}
+        >
+          <Icon name="logout" size={16} />
+        </button>
+      </div>
+      <ThemeToggle />
+    </div>
+  );
+}
+
+function NotFound() {
+  return (
+    <div className="page">
+      <div className="empty-state">
+        <div className="empty-icon">
+          <Icon name="compass" size={22} />
+        </div>
+        <h3>There is no such page</h3>
+        <p className="muted">The link may be old, or the template was deleted.</p>
+        <div className="empty-action">
+          <Link to="/" className="btn btn-primary">
+            Explore templates
+          </Link>
+        </div>
+      </div>
     </div>
   );
 }

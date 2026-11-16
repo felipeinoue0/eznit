@@ -1,31 +1,33 @@
 import { useState } from "react";
 import type { FormEvent } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { login, messageOf, refused, setToken } from "../api";
+import { Link, useLocation, useNavigate } from "react-router-dom";
+import { login, messageOf, refused } from "../api";
+import AuthLayout from "../components/AuthLayout";
+import { Spinner } from "../components/ui";
+import { useSession } from "../session";
 
-interface LoginProps {
-  onAuthenticated: (token: string) => void;
-}
-
-// handedOver is the reason a page sent the reader here. App hands over "your
-// session ended" when the API refused the token, and the login page is where
-// that sentence belongs.
-function handedOver(state: unknown): string | null {
+// handedOver reads what the page that sent the reader here left: a reason
+// ("your session ended") and the page to go back to.
+function handedOver(state: unknown): { message: string | null; from: string } {
   if (typeof state !== "object" || state === null) {
-    return null;
+    return { message: null, from: "/" };
   }
-
-  const message = (state as { message?: unknown }).message;
-  return typeof message === "string" ? message : null;
+  const { message, from } = state as { message?: unknown; from?: unknown };
+  return {
+    message: typeof message === "string" ? message : null,
+    from: typeof from === "string" ? from : "/",
+  };
 }
 
-export default function Login({ onAuthenticated }: LoginProps) {
+export default function Login() {
   const navigate = useNavigate();
   const location = useLocation();
-  const [email, setEmail] = useState<string>("");
-  const [password, setPassword] = useState<string>("");
-  const [error, setError] = useState<string | null>(() => handedOver(location.state));
-  const [busy, setBusy] = useState<boolean>(false);
+  const { signIn } = useSession();
+  const handed = handedOver(location.state);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(handed.message);
+  const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>): Promise<void> {
     event.preventDefault();
@@ -34,9 +36,8 @@ export default function Login({ onAuthenticated }: LoginProps) {
 
     try {
       const response = await login(email, password);
-      setToken(response.token);
-      onAuthenticated(response.token);
-      navigate("/");
+      signIn(response.token, email.trim());
+      navigate(handed.from, { replace: true });
     } catch (cause: unknown) {
       // The server refuses to say which half was wrong, so neither does the
       // page — the same one line the window shows (#337).
@@ -47,30 +48,26 @@ export default function Login({ onAuthenticated }: LoginProps) {
   }
 
   return (
-    <section className="page narrow">
-      <div className="pagehead">
-        <h1>Log in</h1>
-        <p className="lead">
-          The catalogue is public; a session lets you publish templates, upload files and see your
-          own private ones. The token stays in this browser and nowhere else.
-        </p>
-      </div>
-
-      <form className="form" onSubmit={submit}>
+    <AuthLayout
+      title="Welcome back"
+      subtitle="Sign in to publish templates, manage your files and keep your commands."
+    >
+      <form className="form" onSubmit={(event) => void submit(event)}>
         <label className="field">
-          <span>Email</span>
+          <span className="field-label">Email</span>
           <input
             type="email"
             name="email"
             required
             autoComplete="username"
+            placeholder="you@example.com"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
           />
         </label>
 
         <label className="field">
-          <span>Password</span>
+          <span className="field-label">Password</span>
           <input
             type="password"
             name="password"
@@ -81,12 +78,21 @@ export default function Login({ onAuthenticated }: LoginProps) {
           />
         </label>
 
-        {error !== null ? <p className="error">{error}</p> : null}
+        {error !== null ? (
+          <p className="form-error" role="alert">
+            {error}
+          </p>
+        ) : null}
 
-        <button className="primary" type="submit" disabled={busy}>
-          {busy ? "Logging in…" : "Log in"}
+        <button className="btn btn-primary btn-block btn-lg" type="submit" disabled={busy}>
+          {busy ? <Spinner /> : null}
+          {busy ? "Signing in…" : "Sign in"}
         </button>
       </form>
-    </section>
+
+      <p className="auth-switch">
+        New here? <Link to="/signup">Create an account</Link>
+      </p>
+    </AuthLayout>
   );
 }
