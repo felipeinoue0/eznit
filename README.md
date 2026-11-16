@@ -80,6 +80,22 @@ Templates tab after publishing.
 | --- | --- |
 | ![catalogue, dark](docs/screenshots/catalogue-dark.png) | ![catalogue, light](docs/screenshots/catalogue-light.png) |
 
+The browser covers the whole loop, no CLI needed:
+
+- **Explore** the templates on a server — search, filter by kind, read every
+  file, download a `.zip`.
+- **Publish and edit templates** — upload files or a whole folder, write text
+  files in place, declare the `{{QUESTIONS}}` a template asks (placeholders
+  used but not declared are pointed out), pull in scripts from your library.
+- **Public or private** — one switch per template and per file, with a
+  confirmation before anything becomes public.
+- **Files** — drag-and-drop upload, upload a new version, download, delete.
+- **Commands** — the script library templates reference.
+- **Run locally** — the exact CLI lines for this server, per shell.
+- **Settings** — point the page at another eznit server by URL, with a live
+  health check; each server keeps its own sign-in (the server must allow this
+  page's origin — see *A UI on another origin* below).
+
 Sign up or log in on the page, or paste the token from `eznit login` into
 `localStorage` as `eznit.token`. The full set of screenshots is under
 [`docs/screenshots`](docs/screenshots).
