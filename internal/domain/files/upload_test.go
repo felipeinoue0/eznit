@@ -203,3 +203,33 @@ func multipartFile(t *testing.T, content []byte) multipart.File {
 
 	return file
 }
+
+// A new version keeps the record's name and extension in the same shape the
+// first upload stored them: the extension without its dot. Every client joins
+// name + "." + ext, so a dotted one read "gitconfig..txt" after a replace (#358).
+func TestUpdateFileStoresTheExtensionWithoutItsDot(t *testing.T) {
+	owner := uuid.New()
+	repo := newFakeRepository()
+	svc := newTestService(t, repo, t.TempDir())
+
+	header := &multipart.FileHeader{Filename: "gitconfig.txt"}
+	if _, appError := svc.StorageFile(userContext(owner), multipartFile(t, []byte("v1")), header, "text/plain"); appError != nil {
+		t.Fatalf("upload: %v", appError)
+	}
+	if len(repo.stored) != 1 {
+		t.Fatalf("expected one stored file, got %d", len(repo.stored))
+	}
+	id := repo.stored[0].ID
+
+	if _, appError := svc.UpdateFile(userContext(owner), multipartFile(t, []byte("v2")), header, id, owner); appError != nil {
+		t.Fatalf("update: %v", appError)
+	}
+
+	updated := repo.files[id]
+	if updated.Name != "gitconfig" || updated.Ext != "txt" {
+		t.Errorf("after an update the record is (%q, %q), want (%q, %q)", updated.Name, updated.Ext, "gitconfig", "txt")
+	}
+	if updated.Version != 2 {
+		t.Errorf("version = %d, want 2", updated.Version)
+	}
+}
