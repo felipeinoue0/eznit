@@ -81,3 +81,6 @@ web/dist/*
 
 # Release/CI build output (the GUI matrix writes the window here).
 out/
+
+# Claude Code per-user overrides — personal permission grants, never shared.
+.claude/settings.local.json

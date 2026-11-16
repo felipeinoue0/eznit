@@ -109,11 +109,14 @@ python scripts/dev-up.py dev-up              # native Windows: same thing
 | WSL2 | `make dev-up` (the host is Linux) |
 | Windows (native) | `python scripts/dev-up.py dev-up`, or the compose command above |
 
-`make dev-opencode` runs the AI coding agent inside the sandbox, with the host's
-`~/.config/gh`, `~/.config/opencode` and `~/.gitconfig` mounted read-only. It needs
-a **Linux** opencode binary: on macOS and native Windows the target refuses and the
-agent stays on the host (use WSL2). The container has no Docker socket — the agent
-inside it cannot manage containers, on purpose.
+`make claude-auto`, `make codex-auto` or `make opencode-auto` (or the plain
+`claude`, `codex`, `opencode`) runs that AI agent inside the sandbox, on any host
+OS — the agents are installed in the image. Each asks for its login once and keeps
+it in a Docker volume, so restarts and `make dev-build` keep you signed in;
+`make claude-upgrade` (or `agents-upgrade`) moves an agent to its latest release
+and `make doctor` checks everything at once. Only `~/.config/gh` and
+`~/.gitconfig` are mounted from the host, read-only. The container has no Docker
+socket — the agent inside it cannot manage containers, on purpose.
 
 ## 🖥️ The desktop app
 
