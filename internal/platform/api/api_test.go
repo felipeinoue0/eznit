@@ -126,3 +126,42 @@ func TestAnUnknownAPIPathIsNotFound(t *testing.T) {
 		t.Errorf("GET /v1/nope = %d, want %d", recorder.Code, http.StatusNotFound)
 	}
 }
+
+// A UI on another origin can reach a guarded route only if the browser's
+// preflight is answered without a token — the browser never sends one with it.
+// Off by default: the same preflight gets no CORS answer at all (#355).
+func TestAPreflightIsAnsweredBeforeTheGuard(t *testing.T) {
+	log, err := logger.NewJson(t.TempDir(), false)
+	if err != nil {
+		t.Fatalf("logger: %v", err)
+	}
+	t.Cleanup(func() { log.Sync() })
+
+	tests := []struct {
+		name      string
+		origins   []string
+		wantAllow string
+	}{
+		{"off by default", nil, ""},
+		{"listed origin", []string{"http://localhost:5173"}, "http://localhost:5173"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			router := NewRouter(Config{Logger: log, CORSOrigins: tt.origins})
+
+			req := httptest.NewRequest(http.MethodOptions, "/v1/files/me", nil)
+			req.Header.Set("Origin", "http://localhost:5173")
+			req.Header.Set("Access-Control-Request-Method", http.MethodGet)
+			req.Header.Set("Access-Control-Request-Headers", "authorization")
+			rec := httptest.NewRecorder()
+			router.ServeHTTP(rec, req)
+
+			if got := rec.Header().Get("Access-Control-Allow-Origin"); got != tt.wantAllow {
+				t.Fatalf("Allow-Origin = %q, want %q", got, tt.wantAllow)
+			}
+			if tt.wantAllow != "" && rec.Code != http.StatusNoContent {
+				t.Errorf("preflight = %d, want %d", rec.Code, http.StatusNoContent)
+			}
+		})
+	}
+}

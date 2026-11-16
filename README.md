@@ -84,6 +84,19 @@ Sign up or log in on the page, or paste the token from `eznit login` into
 `localStorage` as `eznit.token`. The full set of screenshots is under
 [`docs/screenshots`](docs/screenshots).
 
+**A UI on another origin.** The API serves its own UI, so it needs no CORS by
+default and sends none. To let a UI on another address point at a server (a
+local `make web_dev` against a remote instance, say), list that UI's origin on
+the server:
+
+```sh
+CORS_ALLOWED_ORIGINS=http://localhost:5173,https://ui.example.com   # or * for any
+```
+
+The session is a bearer token in a header, never a cookie, so no credentials
+are allowed cross-origin: a page on a listed origin can only act with a token
+its user typed into it.
+
 ## 🧩 What you can keep
 
 | Keep | Commands | Travels as |
