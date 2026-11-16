@@ -34,6 +34,10 @@ type Config struct {
 	Logger       *logger.Config
 	UploadFolder string
 	RateLimit    RateLimitConfig
+
+	// CORSOrigins are the browser origins that may call the API from another
+	// site (middleware.CORSEnv). Empty keeps the API same-origin only.
+	CORSOrigins []string
 }
 
 // RateLimitConfig is the auth throttling the router enforces. Build it with
@@ -65,6 +69,9 @@ func RateLimitFromEnv() RateLimitConfig {
 // NewRouter returns the API's router, with every /v1 route mounted on it.
 func NewRouter(cfg Config) *chi.Mux {
 	r := chi.NewRouter()
+
+	// First, so a preflight is answered before any guard asks it for a token.
+	r.Use(middleware.CORS(cfg.CORSOrigins))
 
 	r.Get("/v1/healthcheck", healthcheck)
 

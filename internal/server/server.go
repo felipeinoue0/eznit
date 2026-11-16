@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/fiwon123/eznit/internal/platform/api"
+	"github.com/fiwon123/eznit/internal/platform/middleware"
 	"github.com/fiwon123/eznit/internal/platform/sql"
 	"github.com/fiwon123/eznit/internal/platform/webui"
 	"github.com/fiwon123/eznit/pkg/logger"
@@ -68,6 +69,7 @@ func Run(opts Options) error {
 		Logger:       logger,
 		UploadFolder: os.Getenv("API_UPLOADS"),
 		RateLimit:    api.RateLimitFromEnv(),
+		CORSOrigins:  middleware.CORSOriginsFromEnv(),
 	})
 
 	logger.Info("Initialized routes!")
@@ -75,7 +77,8 @@ func Run(opts Options) error {
 	// The web UI, when there is one. In development the Vite dev server
 	// proxies /v1 to this API; in production this process serves the UI from
 	// web/dist, or from the copy embedded at build time. One origin either
-	// way, so the API needs no CORS headers.
+	// way, so the API needs no CORS headers — unless CORS_ALLOWED_ORIGINS lets
+	// a UI on another origin point at this server (#355).
 	//
 	// A deployment with a separate web tier (the `web` service in
 	// docker-compose.yml) turns this off: then :4000 is the API only, and the
