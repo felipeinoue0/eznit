@@ -71,3 +71,15 @@ func FilterTemplates(items []templates.TemplateData, kind string) []templates.Te
 
 	return kept
 }
+
+// PublishTemplate stores a new template for the session's account and returns
+// it as the server stored it — with its id, the slug it derived and version 1.
+func (c *Client) PublishTemplate(request templates.PublishRequest) (*templates.TemplateDetail, error) {
+	var envelope types.Envelope[templates.TemplateDetail]
+
+	if err := c.do(http.MethodPost, "/v1/templates", jsonBody(request), &envelope); err != nil {
+		return nil, err
+	}
+
+	return &envelope.Data, nil
+}

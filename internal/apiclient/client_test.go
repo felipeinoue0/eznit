@@ -378,3 +378,34 @@ func TestErrorsUseTheEnvelopeMessage(t *testing.T) {
 		t.Errorf("Error() = %q", err.Error())
 	}
 }
+
+// The shared list needs no session and decodes the owner fields; an empty
+// server is an empty list, not an error.
+func TestListSharedFiles(t *testing.T) {
+	t.Run("rows", func(t *testing.T) {
+		client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/v1/files/shared" {
+				t.Errorf("path = %q", r.URL.Path)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":{"data":[{"id":"a1","name":"gitconfig","ext":"txt","version":2,"is_public":true,"owner":"u1","owner_email":"ana@example.com"}],"total":1}}`))
+		})
+		files, err := client.ListSharedFiles()
+		if err != nil {
+			t.Fatalf("ListSharedFiles: %v", err)
+		}
+		if len(files) != 1 || files[0].Name != "gitconfig" || files[0].Ext != "txt" || files[0].OwnerEmail != "ana@example.com" || files[0].Version != 2 {
+			t.Errorf("files = %+v", files)
+		}
+	})
+	t.Run("empty", func(t *testing.T) {
+		client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"data":{"data":null,"total":0}}`))
+		})
+		files, err := client.ListSharedFiles()
+		if err != nil || files == nil || len(files) != 0 {
+			t.Errorf("files = %v, err = %v; want an empty list", files, err)
+		}
+	})
+}
