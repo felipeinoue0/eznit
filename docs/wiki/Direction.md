@@ -49,7 +49,12 @@ machine next to it is solving the wrong problem.
   offline `.eznit` bundle the CLI reads ([#260](https://github.com/fiwon123/eznit/issues/260)),
   and applies a template into a folder with the same rules `template apply`
   uses — safe paths, no silent overwrite, the check before the questions
-  ([#259](https://github.com/fiwon123/eznit/issues/259), v0.26.0).
+  ([#259](https://github.com/fiwon123/eznit/issues/259), v0.26.0), and publishes a
+  folder with **Publish folder…** — the CLI's folder walk behind a form
+  ([#367](https://github.com/fiwon123/eznit/issues/367), v0.34.0).
+- **Shared files, from the window** — a **Shared** tab lists every file anyone
+  made public, with Download, and works without an account
+  ([#368](https://github.com/fiwon123/eznit/issues/368), v0.34.0).
 
 ## 📱 Device-to-device over cthrone — not implemented
 
