@@ -976,16 +976,39 @@ dev-shell: preflight check-image ## Open a shell inside the dev sandbox
 # One recipe for every agent; the targets below only choose AGENT_CMD (a
 # target-specific variable, which make passes down to this prerequisite).
 #
-# The sandbox is started if it is not running, WITHOUT --force-recreate: a
-# running sandbox is left alone, so an agent already working in it keeps its
-# session. The agent's exit status is the recipe's — no fallback re-runs it in
-# another shell when it exits non-zero.
-dev-agent: preflight check-image
+# Starting an agent starts the dev loop with it (#371): the sandbox runs the API
+# on :$(HOST_PORT) (the start marker) and `web-dev` serves the UI on
+# :$(WEB_PORT), so the page is there while the agent works — before, only the
+# sandbox started, idle, and http://localhost:5173 answered nothing.
+# AGENT_LOOP=0 keeps the sandbox-only behaviour.
+#
+# A running sandbox is left alone, WITHOUT --force-recreate: an agent already
+# working in it keeps its session. `web-dev` is started beside it if missing
+# (--no-deps: it must not touch `dev`); a sandbox started without the API says
+# how to get it rather than restarting it. The agent's exit status is the
+# recipe's — no fallback re-runs it in another shell when it exits non-zero.
+AGENT_LOOP ?= 1
+
+dev-agent: MODE = dev
+dev-agent: preflight check-image preflight-ports
 	@test -n "$(AGENT_CMD)" || { echo "ERROR: run an agent target (make opencode, make claude-auto, ...), not dev-agent." >&2; exit 1; }
-	@if [ -z "$$($(COMPOSE_UP) ps -q dev 2>/dev/null)" ]; then \
-	  echo "[agent] starting the dev sandbox..."; \
-	  token="$$(scripts/resolve-gh-token.sh 2>/dev/null)"; \
-	  GH_TOKEN="$$token" GITHUB_TOKEN="$$token" $(COMPOSE_UP) up -d dev; fi
+	@token="$$(scripts/resolve-gh-token.sh 2>/dev/null || true)"; \
+	 if [ -z "$$($(COMPOSE_UP) ps -q dev 2>/dev/null)" ]; then \
+	  if [ "$(AGENT_LOOP)" != "0" ]; then \
+	    echo "[agent] starting the dev loop: API http://localhost:$(HOST_PORT), UI http://localhost:$(WEB_PORT)"; \
+	    mkdir -p .dev && touch $(DEV_START_MARKER); \
+	  else \
+	    echo "[agent] starting the dev sandbox (AGENT_LOOP=0: no API, no UI)..."; \
+	  fi; \
+	  GH_TOKEN="$$token" GITHUB_TOKEN="$$token" HOST_PORT=$(HOST_PORT) WEB_PORT=$(WEB_PORT) $(COMPOSE_UP) up -d dev; \
+	 elif [ "$(AGENT_LOOP)" != "0" ] && [ ! -f $(DEV_START_MARKER) ]; then \
+	  echo "[agent] note: this sandbox was started without the API, so the UI on :$(WEB_PORT) has nothing to talk to."; \
+	  echo "[agent]       'make dev-restart' starts it (and ends any agent session in the sandbox)."; \
+	 fi; \
+	 if [ "$(AGENT_LOOP)" != "0" ] && [ -z "$$($(COMPOSE_UP) ps -q --status running web-dev 2>/dev/null)" ]; then \
+	  GH_TOKEN="$$token" GITHUB_TOKEN="$$token" HOST_PORT=$(HOST_PORT) WEB_PORT=$(WEB_PORT) $(COMPOSE_UP) up -d --no-deps web-dev \
+	    && echo "[agent] the UI is on http://localhost:$(WEB_PORT) (the first start installs its dependencies — give it a minute)"; \
+	 fi
 	@bin="$(firstword $(AGENT_CMD))"; \
 	 tty="-T"; if [ -t 0 ]; then tty="-it"; fi; \
 	 $(COMPOSE_UP) exec $$tty dev zsh -lc "cd /workspace && if ! command -v $$bin >/dev/null; then echo \"ERROR: $$bin is not installed in this image — add it to SANDBOX_AGENTS in the Dockerfile, then make dev-build.\" >&2; exit 127; fi; exec $(AGENT_CMD) $(AGENT_ARGS)"

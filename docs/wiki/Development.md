@@ -111,7 +111,11 @@ python scripts/dev-up.py dev-up              # native Windows: same thing
 
 `make claude-auto`, `make codex-auto` or `make opencode-auto` (or the plain
 `claude`, `codex`, `opencode`) runs that AI agent inside the sandbox, on any host
-OS — the agents are installed in the image. Each asks for its login once and keeps
+OS — the agents are installed in the image. It starts the dev loop with it: the
+API on http://localhost:4000 and the UI on http://localhost:5173, the same pair
+`make dev-up` serves (`AGENT_LOOP=0` starts the sandbox alone). A sandbox that is
+already running is left alone, so an agent session in it survives; if it was
+started without the API, the target says so — `make dev-restart` starts it. Each asks for its login once and keeps
 it in a Docker volume, so restarts and `make dev-build` keep you signed in;
 `make claude-upgrade` (or `agents-upgrade`) moves an agent to its latest release
 and `make doctor` checks everything at once. Only `~/.config/gh` and
