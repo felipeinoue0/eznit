@@ -16,10 +16,10 @@ import (
 func TestTabsHaveOnePrimaryAction(t *testing.T) {
 	u := newTestUI(t)
 
-	for name, index := range map[string]int{"files": 0, "templates": 1} {
+	for _, name := range []string{"Files", "Templates", "Shared"} {
 		primary := 0
 
-		for _, button := range allButtons(u.tabs.Items[index].Content) {
+		for _, button := range allButtons(tabNamed(t, u, name).Content) {
 			if !button.Hidden && button.Importance == widget.HighImportance {
 				primary++
 			}
@@ -30,7 +30,7 @@ func TestTabsHaveOnePrimaryAction(t *testing.T) {
 		}
 	}
 
-	for _, button := range allButtons(u.tabs.Items[2].Content) {
+	for _, button := range allButtons(tabNamed(t, u, "About").Content) {
 		if !button.Hidden && button.Importance == widget.HighImportance {
 			t.Errorf("the About tab offers a primary action %q; it is a page, not a form", button.Text)
 		}

@@ -2,7 +2,9 @@ package apiclient
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/fiwon123/eznit/internal/domain/templates"
@@ -160,5 +162,60 @@ func TestFilterTemplates(t *testing.T) {
 
 	if got := FilterTemplates(items, templates.KindFish); len(got) != 0 {
 		t.Errorf("an unknown kind kept %d, want none", len(got))
+	}
+}
+
+// A publish is one POST carrying the whole template; the answer is the stored
+// template, whose id the window selects afterwards.
+func TestPublishTemplate(t *testing.T) {
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/templates" {
+			t.Errorf("%s %s, want POST /v1/templates", r.Method, r.URL.Path)
+		}
+		if got := r.Header.Get("Authorization"); got != "Bearer the-token" {
+			t.Errorf("Authorization = %q, want the session: publishing needs one", got)
+		}
+		var got templates.PublishRequest
+		if err := json.NewDecoder(r.Body).Decode(&got); err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		if got.Name != "starter" || !got.IsPublic || len(got.Files) != 1 || got.Files[0].Path != "AGENTS.md" {
+			t.Errorf("request = %+v", got)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": map[string]any{
+			"id": "6f1c1f18-5c2e-4b1e-9d0e-6a1f3b3c0a11", "name": "starter", "version": 1,
+		}})
+	})
+
+	detail, err := client.PublishTemplate(templates.PublishRequest{
+		Name: "starter", Kind: "generic", IsPublic: true,
+		Files: []templates.PublishFile{{Path: "AGENTS.md", Kind: "text", Content: "# x"}},
+	})
+	if err != nil {
+		t.Fatalf("PublishTemplate: %v", err)
+	}
+	if detail.ID.String() != "6f1c1f18-5c2e-4b1e-9d0e-6a1f3b3c0a11" || detail.Version != 1 {
+		t.Errorf("detail = %+v", detail.TemplateData)
+	}
+}
+
+// A refusal comes back as an APIError with the server's sentence, so the
+// window can show "template name is required" rather than a status code.
+func TestPublishTemplateRefused(t *testing.T) {
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"status_code":400,"error":"template name is required"}`))
+	})
+
+	_, err := client.PublishTemplate(templates.PublishRequest{})
+	var apiErr *APIError
+	if !errors.As(err, &apiErr) || apiErr.Status != http.StatusBadRequest {
+		t.Fatalf("err = %v, want a 400 APIError", err)
+	}
+	if !strings.Contains(err.Error(), "template name is required") {
+		t.Errorf("err = %q, want the server's sentence", err.Error())
 	}
 }

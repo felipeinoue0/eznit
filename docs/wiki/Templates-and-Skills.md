@@ -46,9 +46,9 @@ move a file between them:
 | | Sharing a file | Publishing a template |
 | --- | --- | --- |
 | Covers | one file | a whole folder |
-| How | **Share** on the Files tab, or `eznit share` | `eznit template publish ./folder` |
+| How | **Share** on the Files tab, or `eznit share` | **Publish folder…** on the Templates tab, **New template** on the web page, or `eznit template publish ./folder` |
 | Does | makes that one file downloadable by anyone on the instance | adds the folder to the catalogue with a name, a kind and its `{{variables}}` |
-| In the catalogue | no | yes |
+| In the catalogue | no — on the **Shared** tab (and the web page's Explore), visible without an account | yes |
 
 So a shared file never appears in the Templates tab, and no kind filter can
 make it appear: the filter lists **template kinds** (`opencode`, `codex`,
@@ -56,7 +56,15 @@ make it appear: the filter lists **template kinds** (`opencode`, `codex`,
 `powershell`), and **All kinds** means "no filter". It is not a list of your
 files.
 
-To publish one, point the command at the folder and answer its prompts:
+To publish one from the window, press **Publish folder…** on the Templates tab,
+pick the folder, and fill in the form: name (the folder's by default), kind,
+description, Public, and a default for each `{{PLACEHOLDER}}` the files use (an
+empty default makes it a question asked on every apply). It uses the same
+folder walk as the CLI, so `.git`, `node_modules` and the like are left out,
+and a file that is too big is named. Without a session the button says to sign
+in on the Files tab.
+
+From a terminal, point the command at the folder and answer its prompts:
 
 ```sh
 eznit template init --kind opencode --target ./demo   # a starter, no server needed
@@ -65,7 +73,7 @@ eznit template publish ./demo --public
 ```
 
 Then press **Refresh** on the window's Templates tab. The window browses, shows,
-exports and applies templates; publishing is a CLI step.
+exports, applies and publishes templates.
 
 ## 📤 Publish, list, show, apply
 

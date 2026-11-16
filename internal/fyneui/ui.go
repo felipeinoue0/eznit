@@ -50,6 +50,7 @@ type ui struct {
 	client    *apiclient.Client
 	files     *filesView
 	templates *templatesView
+	shared    *sharedView
 	server    *serverView
 	updater   *appUpdater
 
@@ -96,6 +97,7 @@ func Run(version string, apiURL string, serverDir string) error {
 	u.client = apiclient.New(u.address.url)
 	u.files = newFilesView(u)
 	u.templates = newTemplatesView(u)
+	u.shared = newSharedView(u)
 	u.server = newServerView(u, serverFrom(serverDir))
 
 	if u.local {
@@ -107,10 +109,12 @@ func Run(version string, apiURL string, serverDir string) error {
 	// a machine whose server has never run — running it and pointing it at a
 	// database is how a first install gets something to log in to.
 	templatesTab := container.NewTabItemWithIcon("Templates", theme.DocumentIcon(), u.templates.content())
+	sharedTab := container.NewTabItemWithIcon("Shared", theme.MailForwardIcon(), u.shared.content())
 
 	u.tabs = container.NewAppTabs(
 		container.NewTabItemWithIcon("Files", theme.FolderIcon(), u.files.content()),
 		templatesTab,
+		sharedTab,
 		container.NewTabItemWithIcon("Server", theme.ComputerIcon(), u.server.content()),
 		container.NewTabItemWithIcon("About", theme.InfoIcon(), u.aboutContent()),
 	)
@@ -119,8 +123,11 @@ func Run(version string, apiURL string, serverDir string) error {
 	// window whose server is still being set up on another tab should not open
 	// with a red message about it.
 	u.tabs.OnSelected = func(item *container.TabItem) {
-		if item == templatesTab {
+		switch item {
+		case templatesTab:
 			u.templates.ensureLoaded()
+		case sharedTab:
+			u.shared.ensureLoaded()
 		}
 	}
 
@@ -290,6 +297,9 @@ func (u *ui) setAPI(address apiChoice) {
 	if u.templates != nil {
 		u.templates.forget()
 	}
+	if u.shared != nil {
+		u.shared.forget()
+	}
 }
 
 // useServer points the Files tab at another instance and remembers the choice.
@@ -321,6 +331,11 @@ func (u *ui) useServer(address apiChoice) (bool, error) {
 
 // showMain swaps the Files tab to the signed-in library.
 func (u *ui) showMain() {
+	// A session names the owners on the Shared tab; reload it when opened.
+	if u.shared != nil {
+		u.shared.forget()
+	}
+
 	u.setFilesTab(u.files.content())
 	u.files.refresh()
 }
@@ -386,6 +401,10 @@ func (u *ui) forgetSession(message string) {
 
 	if u.templates != nil {
 		u.templates.forget()
+	}
+
+	if u.shared != nil {
+		u.shared.forget()
 	}
 
 	u.showLogin(message)

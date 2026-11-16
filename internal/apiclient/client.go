@@ -220,6 +220,33 @@ func (c *Client) ListFiles() ([]File, error) {
 	return envelope.Data.Data, nil
 }
 
+// SharedFile is one file somebody on the server made public. OwnerEmail is
+// empty for a caller without a session: the API does not hand a visitor the
+// instance's list of accounts.
+type SharedFile struct {
+	File
+	Owner      string `json:"owner"`
+	OwnerEmail string `json:"owner_email"`
+}
+
+// ListSharedFiles returns every public file on the server. It needs no
+// session; with one, each row also names its owner.
+func (c *Client) ListSharedFiles() ([]SharedFile, error) {
+	var envelope types.Envelope[struct {
+		Data []SharedFile `json:"data"`
+	}]
+
+	if err := c.do(http.MethodGet, "/v1/files/shared", nil, &envelope); err != nil {
+		return nil, err
+	}
+
+	if envelope.Data.Data == nil {
+		return []SharedFile{}, nil
+	}
+
+	return envelope.Data.Data, nil
+}
+
 // UploadFile sends one file from disk and replaces nothing: the API keeps a
 // new version when the name already exists.
 func (c *Client) UploadFile(path string) error {
