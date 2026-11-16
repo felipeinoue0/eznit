@@ -165,3 +165,73 @@ func TestMigrationStripsTheStoredExtensionDot(t *testing.T) {
 	// The down is a no-op and must still run.
 	ApplyMigration(t, db, "000016_strip_file_extension_dot.down.sql")
 }
+
+// 000017 rebuilds the names the old ReplaceAll split cut short, from the
+// stored path (#364). It is seeded at 000016 with what the old code wrote.
+func TestMigrationRestoresCutFileNames(t *testing.T) {
+	db := Open(t)
+	t.Cleanup(func() {
+		if err := MigrateUpNow(db); err != nil {
+			t.Errorf("restore the full schema: %v", err)
+		}
+	})
+
+	MigrateUpThrough(t, db, "000016")
+
+	var owner string
+	if err := db.Get(&owner, "INSERT INTO users (email, password) VALUES ('n@example.com', 'x') RETURNING id"); err != nil {
+		t.Fatalf("seed a user: %v", err)
+	}
+
+	const root = "/srv/uploads/" + "11111111-1111-1111-1111-111111111111"
+	rows := []struct {
+		about             string
+		id                string
+		name, ext, path   string
+		wantName, wantExt string
+	}{
+		{"extension repeated in the name", "00000000-0000-0000-0000-00000000000a",
+			"notes", "txt", root + "/00000000-0000-0000-0000-00000000000a/2_notes.txt.txt", "notes.txt", "txt"},
+		{"extension inside the name", "00000000-0000-0000-0000-00000000000b",
+			"a-guide", "md", root + "/00000000-0000-0000-0000-00000000000b/1_a.md-guide.md", "a.md-guide", "md"},
+		{"already right: untouched", "00000000-0000-0000-0000-00000000000c",
+			"report", "pdf", root + "/00000000-0000-0000-0000-00000000000c/1_report.pdf", "report", "pdf"},
+		{"a name that starts like a version", "00000000-0000-0000-0000-00000000000d",
+			"2024_report", "md", root + "/00000000-0000-0000-0000-00000000000d/3_2024_report.md", "2024_report", "md"},
+		{"a dotfile", "00000000-0000-0000-0000-00000000000e",
+			"", "bashrc", root + "/00000000-0000-0000-0000-00000000000e/1_.bashrc", "", "bashrc"},
+		{"no extension", "00000000-0000-0000-0000-00000000000f",
+			"Makefile", "", root + "/00000000-0000-0000-0000-00000000000f/1_Makefile", "Makefile", ""},
+		{"Windows separators", "00000000-0000-0000-0000-000000000010",
+			"x", "gz", `C:\eznit\uploads\u\00000000-0000-0000-0000-000000000010\1_x.tar.gz`, "x.tar", "gz"},
+		// The earliest layout: no file-id folder, the name already cut. Left alone.
+		{"legacy layout: untouched", "00000000-0000-0000-0000-000000000011",
+			"notes", "txt", "/srv/uploads/1700000000_notes", "notes", "txt"},
+		// Another row's id in the path is not this row's file.
+		{"someone else's folder: untouched", "00000000-0000-0000-0000-000000000012",
+			"keep", "txt", root + "/00000000-0000-0000-0000-00000000000a/2_other.txt", "keep", "txt"},
+	}
+	for _, row := range rows {
+		if _, err := db.Exec("INSERT INTO files (id, user_id, name, ext, path) VALUES ($1, $2, $3, $4, $5)",
+			row.id, owner, row.name, row.ext, row.path); err != nil {
+			t.Fatalf("seed %s: %v", row.about, err)
+		}
+	}
+
+	ApplyMigration(t, db, "000017_restore_cut_file_names.up.sql")
+
+	for _, row := range rows {
+		var got struct {
+			Name string `db:"name"`
+			Ext  string `db:"ext"`
+		}
+		if err := db.Get(&got, "SELECT name, ext FROM files WHERE id = $1", row.id); err != nil {
+			t.Fatalf("read %s: %v", row.about, err)
+		}
+		if got.Name != row.wantName || got.Ext != row.wantExt {
+			t.Errorf("%s: (%q, %q), want (%q, %q)", row.about, got.Name, got.Ext, row.wantName, row.wantExt)
+		}
+	}
+
+	ApplyMigration(t, db, "000017_restore_cut_file_names.down.sql")
+}
