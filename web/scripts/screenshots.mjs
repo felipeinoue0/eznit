@@ -58,8 +58,9 @@ const IGNORE_CONSOLE_ERRORS = process.env.SCREENSHOTS_IGNORE_CONSOLE_ERRORS === 
 const VIEWPORT = { width: 1440, height: 900 };
 // ─────────────────────────────────────────────────────────────────────────────
 
-// The app switches theme with `prefers-color-scheme` only, so the browser
-// context's colorScheme is enough. A hook is kept for an app that switches with
+// The app follows `prefers-color-scheme` until a reader picks a theme in the
+// sidebar (stored per browser), and a fresh capture context has no pick, so
+// the browser context's colorScheme is enough. A hook is kept for an app that switches with
 // a class or attribute instead.
 async function applyTheme(_page, _theme) {}
 

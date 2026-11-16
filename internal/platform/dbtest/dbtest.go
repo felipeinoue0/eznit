@@ -125,6 +125,63 @@ func MigrateUp(t *testing.T, db *sqlx.DB) {
 	}
 }
 
+// MigrateUpThrough resets the schema and applies the up migrations whose
+// file name sorts at or before the given prefix ("000015"). A data migration
+// is tested by seeding the shape it repairs at the version before it, then
+// applying it with ApplyMigration.
+func MigrateUpThrough(t *testing.T, db *sqlx.DB, prefix string) {
+	t.Helper()
+
+	if _, err := db.Exec("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"); err != nil {
+		t.Fatalf("reset the public schema: %v", err)
+	}
+	files := migrationFiles(t, ".up.sql")
+	for _, file := range files {
+		if filepath.Base(file)[:len(prefix)] > prefix {
+			break
+		}
+		execFile(t, db, file)
+	}
+}
+
+// ApplyMigration runs one migration file by its base name.
+func ApplyMigration(t *testing.T, db *sqlx.DB, name string) {
+	t.Helper()
+
+	dir, err := migrationsDir()
+	if err != nil {
+		t.Fatalf("find the migrations: %v", err)
+	}
+	execFile(t, db, filepath.Join(dir, name))
+}
+
+func migrationFiles(t *testing.T, suffix string) []string {
+	t.Helper()
+
+	dir, err := migrationsDir()
+	if err != nil {
+		t.Fatalf("find the migrations: %v", err)
+	}
+	files, err := filepath.Glob(filepath.Join(dir, "*"+suffix))
+	if err != nil || len(files) == 0 {
+		t.Fatalf("list %s migrations in %s: %v", suffix, dir, err)
+	}
+	sort.Strings(files)
+	return files
+}
+
+func execFile(t *testing.T, db *sqlx.DB, file string) {
+	t.Helper()
+
+	body, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatalf("read %s: %v", file, err)
+	}
+	if _, err := db.Exec(string(body)); err != nil {
+		t.Fatalf("%s: %v", filepath.Base(file), err)
+	}
+}
+
 // MigrateDown applies every `db/migrations/*.down.sql` in reverse filename
 // order, which is the order the migrate tool reverses them in.
 func MigrateDown(t *testing.T, db *sqlx.DB) {

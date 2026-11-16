@@ -111,3 +111,57 @@ func columnExists(t *testing.T, db *sqlx.DB, table, column string) bool {
 	}
 	return exists
 }
+
+// 000016 repairs the rows the old replace path wrote with a dotted extension
+// (#358, #361) and leaves a correct row, a dotfile's empty name and a NULL
+// alone. It is seeded at 000015, the schema the bad rows were written under.
+func TestMigrationStripsTheStoredExtensionDot(t *testing.T) {
+	db := Open(t)
+	t.Cleanup(func() {
+		if err := MigrateUpNow(db); err != nil {
+			t.Errorf("restore the full schema: %v", err)
+		}
+	})
+
+	MigrateUpThrough(t, db, "000015")
+	if columnExists(t, db, "files", "ext") == false {
+		t.Fatal("files.ext is missing at 000015")
+	}
+
+	var owner string
+	if err := db.Get(&owner, "INSERT INTO users (email, password) VALUES ('m@example.com', 'x') RETURNING id"); err != nil {
+		t.Fatalf("seed a user: %v", err)
+	}
+	rows := []struct{ id, name, ext, want string }{
+		{"00000000-0000-0000-0000-000000000001", "notes", ".txt", "txt"},
+		{"00000000-0000-0000-0000-000000000002", "notes", "txt", "txt"},
+		{"00000000-0000-0000-0000-000000000003", "archive.tar", "..gz", "gz"},
+		{"00000000-0000-0000-0000-000000000004", "Makefile", "", ""},
+	}
+	for _, row := range rows {
+		if _, err := db.Exec("INSERT INTO files (id, user_id, name, ext, path) VALUES ($1, $2, $3, $4, '/x')", row.id, owner, row.name, row.ext); err != nil {
+			t.Fatalf("seed %s: %v", row.ext, err)
+		}
+	}
+	if _, err := db.Exec("INSERT INTO files (id, user_id, name, ext, path) VALUES ('00000000-0000-0000-0000-000000000005', $1, 'n', NULL, '/x')", owner); err != nil {
+		t.Fatalf("seed a NULL ext: %v", err)
+	}
+
+	ApplyMigration(t, db, "000016_strip_file_extension_dot.up.sql")
+
+	for _, row := range rows {
+		var got string
+		if err := db.Get(&got, "SELECT ext FROM files WHERE id = $1", row.id); err != nil {
+			t.Fatalf("read %s: %v", row.id, err)
+		}
+		if got != row.want {
+			t.Errorf("ext %q after 000016 = %q, want %q", row.ext, got, row.want)
+		}
+	}
+	if n := Count(t, db, "files", "ext IS NULL"); n != 1 {
+		t.Errorf("NULL ext rows = %d, want 1 (left alone)", n)
+	}
+
+	// The down is a no-op and must still run.
+	ApplyMigration(t, db, "000016_strip_file_extension_dot.down.sql")
+}

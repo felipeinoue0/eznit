@@ -237,6 +237,16 @@ func (s *service) GetFileForDownload(ctx context.Context, id uuid.UUID) (*File, 
 // stored without a word to the client about it — the write stays inside
 // the upload folder either way, but a request that is refused is a request
 // the client can see.
+// splitName splits a file name into the name and the extension the record
+// stores: the extension without its dot, and only the last one removed from
+// the name. Upload and update share it, so a new version of "notes.txt" reads
+// "notes" + "txt" like the first one did — not ".txt", which every client
+// joined into "notes..txt" (#358).
+func splitName(fileName string) (name string, ext string) {
+	dotted := filepath.Ext(fileName)
+	return strings.TrimSuffix(fileName, dotted), strings.TrimPrefix(dotted, ".")
+}
+
 func safeFileName(name string) (string, *errors.AppError) {
 	if name == "" {
 		return "", errors.NewAppError(http.StatusBadRequest, "invalid file name")
@@ -274,9 +284,7 @@ func (s *service) StorageFile(ctx context.Context, file multipart.File, header *
 		return "", appError
 	}
 
-	ext := filepath.Ext(fileName)
-	cleanName := strings.ReplaceAll(fileName, ext, "")
-	ext = strings.ReplaceAll(ext, ".", "")
+	cleanName, ext := splitName(fileName)
 	fileID, err := uuid.NewV7()
 
 	s.logger.Debug("clean name", slog.String("name", cleanName))
@@ -405,9 +413,7 @@ func (s *service) UpdateFile(ctx context.Context, file multipart.File, header *m
 		return "", appError
 	}
 
-	ext := filepath.Ext(fileName)
-
-	cleanName := strings.ReplaceAll(fileName, ext, "")
+	cleanName, ext := splitName(fileName)
 	finalPath := storage.FilePath(s.uploadFolder, fileInfo.UserID, fileInfo.ID, newVersion, fileName)
 
 	if !helper.PathIsInside(s.uploadFolder, finalPath) {

@@ -1,4 +1,5 @@
 import type { TemplateFileData } from "../types";
+import Icon from "./Icon";
 
 // A node of the file tree: a directory is a node with children and no file, a
 // file is a node with a file and no children.
@@ -65,7 +66,7 @@ interface FileTreeProps {
 
 export default function FileTree({ nodes, selected, onSelect }: FileTreeProps) {
   if (nodes.length === 0) {
-    return <p className="empty">This template holds no files.</p>;
+    return <p className="muted small tree-empty">No files.</p>;
   }
 
   return (
@@ -76,7 +77,10 @@ export default function FileTree({ nodes, selected, onSelect }: FileTreeProps) {
           <li key={node.path}>
             {file === null ? (
               <>
-                <span className="treedir">{node.name}/</span>
+                <span className="treedir">
+                  <Icon name="folder" size={15} />
+                  {node.name}
+                </span>
                 <FileTree nodes={node.children} selected={selected} onSelect={onSelect} />
               </>
             ) : (
@@ -85,7 +89,8 @@ export default function FileTree({ nodes, selected, onSelect }: FileTreeProps) {
                 className={selected === file.path ? "treefile selected" : "treefile"}
                 onClick={() => onSelect(file)}
               >
-                {node.name}
+                <Icon name={file.kind === "binary" ? "file" : "fileCode"} size={15} />
+                <span className="treefile-name">{node.name}</span>
                 {file.is_executable ? <span className="exec">exec</span> : null}
               </button>
             )}
