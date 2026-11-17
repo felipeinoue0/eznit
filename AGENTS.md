@@ -175,7 +175,7 @@ make web_build # build the web UI into web/dist
 make web_dev   # run the Vite dev server
 make dev-up    # the dev loop: UI :5173 (Vite, hot reload) + API :4000
 make up        # build + run the product: API :4000, web UI :5173, db, migrations
-make vps-init DOMAIN=<host>  # once on a VPS: random db password, loopback ports, HTTPS (caddy)
+make vps-init DOMAIN=<host> [PROXY=traefik|none]  # once on a VPS: random db password, loopback ports, HTTPS
 make vps-update [TAG=vX.Y.Z] # on a VPS: back up, check out a release, rebuild; data kept
 ```
 

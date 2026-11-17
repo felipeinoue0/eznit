@@ -444,10 +444,11 @@ restore: ## Restore BACKUP=<dir> over the current data (takes a safety backup fi
 
 # A public server in three commands (#398), see docs/wiki/Deploying-on-a-VPS.md:
 #   make vps-init DOMAIN=eznit.example.com   once: password, private ports, HTTPS
+#                 [PROXY=traefik|none]       behind a proxy the server already runs
 #   docker compose up -d / docker compose down
 #   make vps-update [TAG=vX.Y.Z]             back up, then move to a release
-vps-init: setup ## Prepare this checkout as a public HTTPS server: DOMAIN=<host name>
-	@sh scripts/vps-init.sh "$(DOMAIN)"
+vps-init: setup ## Prepare this checkout as a public HTTPS server: DOMAIN=<host name> [PROXY=caddy|traefik|none]
+	@sh scripts/vps-init.sh "$(DOMAIN)" "$(or $(PROXY),caddy)"
 
 vps-update: ## Back up, then move to the newest release (or TAG=vX.Y.Z) and rebuild
 	@sh scripts/vps-update.sh "$(TAG)"

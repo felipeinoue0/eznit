@@ -24,7 +24,7 @@ and change its password without losing data.**
 ```sh
 # once
 git clone https://github.com/fiwon123/eznit.git /srv/eznit && cd /srv/eznit
-make vps-init DOMAIN=eznit.example.com
+make vps-init DOMAIN=eznit.example.com     # add PROXY=traefik if Traefik runs there
 docker compose up -d --build
 
 # day to day
@@ -111,6 +111,10 @@ make vps-init DOMAIN=eznit.example.com
 
 Running it again is safe. It changes only the domain and what is not set yet.
 
+> [!NOTE]
+> **Traefik or another proxy already on the server?** Add `PROXY=traefik` or
+> `PROXY=none`, see [Behind Traefik or your own proxy](#-behind-traefik-or-your-own-proxy).
+
 > [!CAUTION]
 > Postgres applies the password **only when it creates the volume**. That is why
 > `vps-init` will not replace it once a database exists. Changing it later is a
@@ -148,22 +152,53 @@ flowchart LR
 In the desktop window, open **Settings → Server**, type
 `https://eznit.example.com` and click **Connect**.
 
-<details>
-<summary>🛠️ Doing it by hand, or with your own reverse proxy</summary>
+## 🔀 Behind Traefik or your own proxy
 
-`make vps-init` only writes these lines to `.env` and a random password to
-`secrets/db_password.txt` (mode `600`):
+If the server already runs a reverse proxy for other projects, it owns ports 80 and
+443, so the built-in Caddy has to stay off. Pick the proxy when you initialise:
 
-```sh
-API_BIND=127.0.0.1
-WEB_BIND=127.0.0.1
-TRUST_PROXY=true
-DOMAIN=eznit.example.com
-COMPOSE_PROFILES=https
-```
+| Command | HTTPS comes from |
+| --- | --- |
+| `make vps-init DOMAIN=…` | 🔒 the built-in `caddy` service (the default) |
+| `make vps-init DOMAIN=… PROXY=traefik` | 🚦 your Traefik, through labels on the `web` service |
+| `make vps-init DOMAIN=… PROXY=none` | 🛠️ any proxy you configure, pointed at `127.0.0.1:5173` |
 
-To keep a reverse proxy you already run on the host, leave out `DOMAIN` and
-`COMPOSE_PROFILES` and point it at `127.0.0.1:5173`. With Caddy:
+Then start it as usual with `docker compose up -d --build`. Running `vps-init` again
+with another `PROXY` switches between them.
+
+### 🚦 Traefik
+
+`PROXY=traefik` writes **`docker-compose.override.yml`** next to
+`docker-compose.yml`. It puts `web` on Traefik's network and adds the router labels
+for `DOMAIN`.
+
+> [!TIP]
+> **Put every server-specific Compose change in `docker-compose.override.yml`,
+> never in `docker-compose.yml`.** Compose merges the override into every command
+> (`up`, `down`, `ps`) automatically. It is gitignored, so `git fetch`,
+> a release checkout and `make vps-update` never collide with it. An edit to
+> `docker-compose.yml` makes `vps-update` refuse to run.
+
+If your Traefik uses other names than the defaults, set them in `.env`:
+
+| Variable | Default | Must match |
+| --- | --- | --- |
+| `TRAEFIK_NETWORK` | `traefik` | the Docker network Traefik is on (`docker network ls`) |
+| `TRAEFIK_ENTRYPOINT` | `websecure` | the HTTPS entrypoint in Traefik's configuration |
+| `TRAEFIK_CERTRESOLVER` | `letsencrypt` | the certificate resolver in Traefik's configuration |
+
+`vps-init` warns when the network does not exist. It never overwrites an existing
+override: delete the file and run it again for a fresh one, or edit it freely.
+
+> [!IMPORTANT]
+> The override lists **both** `default` and `traefik` under `networks`. `default`
+> is how `web` reaches the API. With `traefik` alone, every page loads and every
+> request fails.
+
+### 🛠️ Any other proxy
+
+`PROXY=none` leaves the built-in Caddy off and writes no override. Send
+`https://DOMAIN` to `127.0.0.1:5173`. With Caddy on the host:
 
 ```caddyfile
 eznit.example.com {
@@ -171,7 +206,8 @@ eznit.example.com {
 }
 ```
 
-</details>
+The proxy must set `X-Forwarded-For`, which Caddy, Traefik and nginx do by default.
+Otherwise the login rate limit counts every visitor as one.
 
 ## 🔄 Updating without touching the data
 
