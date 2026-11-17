@@ -10,7 +10,7 @@ require (
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/joho/godotenv v1.5.1
 	github.com/lib/pq v1.12.3
-	github.com/mattn/go-runewidth v0.0.24
+	github.com/mattn/go-runewidth v0.0.31
 	github.com/minio/selfupdate v0.6.0
 	github.com/ncruces/zenity v0.10.15
 	github.com/pelletier/go-toml/v2 v2.2.4
