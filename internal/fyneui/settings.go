@@ -81,9 +81,15 @@ func (v *settingsView) content() fyne.CanvasObject {
 	if v.ui.server != nil {
 		// The tab names the section, so one line says what it is; the panel
 		// under it is the tallest thing in the window and keeps the room.
-		local := container.NewBorder(
-			container.New(paddedTop(), newProse(localIntro)),
-			nil, nil, nil, v.ui.server.content())
+		//
+		// The panel keeps the page inset on every side, like Server and Reset
+		// (#382): without it the panel ran to the window's right edge and its
+		// rows started left of the intro above them. The bottom is short by the
+		// padding the panes' own action rows already keep, so the gap below
+		// them is the inset and the section still fits 800x520.
+		local := container.New(
+			layout.NewCustomPaddedLayout(pageInset, pageInset-theme.Padding(), pageInset, pageInset),
+			container.NewBorder(newProse(localIntro), nil, nil, nil, v.ui.server.content()))
 		v.localSection = container.NewTabItemWithIcon("Local server", theme.StorageIcon(), local)
 
 		v.resetSection = container.NewTabItemWithIcon("Reset", theme.DeleteIcon(),
@@ -98,12 +104,6 @@ func (v *settingsView) content() fyne.CanvasObject {
 	v.built = v.sections
 
 	return v.built
-}
-
-// paddedTop gives a section's heading the page margin on three sides; the
-// local server's own panel keeps its padding below it.
-func paddedTop() fyne.Layout {
-	return layout.NewCustomPaddedLayout(pageInset, 0, pageInset, pageInset)
 }
 
 // resetContent is the Reset section: what is erased, what is kept, which folder,

@@ -379,13 +379,19 @@ func (v *serverView) content() fyne.CanvasObject {
 		container.NewHBox(v.start, v.stop, widget.NewSeparator(), v.open),
 		v.health,
 	)
-	folderRow := container.NewBorder(nil, nil, muted("Folder"),
-		container.NewHBox(v.use, v.choose, widget.NewSeparator(), v.reset), v.folder)
+	// The folder field has the row to itself and its actions sit under it,
+	// right-aligned with Start/Stop/Open above (#382): sharing a row with four
+	// buttons left the path cut off at 800 px wide.
+	folderRow := container.NewBorder(nil, nil, muted("Folder"), nil, v.folder)
+	folderActions := container.NewHBox(layout.NewSpacer(), v.use, v.choose, widget.NewSeparator(), v.reset)
 
 	v.note = newProse("")
 	v.note.Hide()
 
-	header := container.NewPadded(container.NewVBox(stateRow, folderRow, v.note))
+	// The header is not padded on its own: the page inset around the panel is
+	// its margin, so the dot, the Folder caption and the tabs below start on
+	// the intro's left edge, and the panel still fits 800x520.
+	header := container.NewVBox(stateRow, folderRow, folderActions, v.note)
 
 	v.buildOutput()
 	v.buildConfiguration()
