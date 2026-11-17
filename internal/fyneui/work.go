@@ -26,7 +26,7 @@ func (u *ui) background(fn func()) {
 //
 // It is for tests: nothing on the UI goroutine may call it while work is in
 // flight, because that would be work waiting for itself. The one background
-// loop that never ends — the Server tab's health poll — is deliberately not
+// loop that never ends — the Local server tab's health poll — is deliberately not
 // counted here, or settling would never return.
 func (u *ui) settle() {
 	u.work.Wait()

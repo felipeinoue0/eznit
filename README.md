@@ -68,19 +68,20 @@ The core commands prompt for what they need. `template init` is the offline
 path: it writes a starter into a folder with no server and no account. Full
 flags: [CLI Reference](https://github.com/fiwon123/eznit/wiki/CLI-Reference).
 
-A **template is a folder** — `template publish`, **Publish folder…** on the
-desktop window's Templates tab, or **New template** on the web page sends the
+A **template is a folder** — `template publish`, **Publish template…** on the
+desktop window's My Account tab, or **New template** on the web page sends the
 whole folder to the catalogue. Sharing a file (`eznit share`, or **Share** on
-the Files tab) only makes that one file downloadable; it does not add anything
-to Templates. Shared files are listed on the window's **Shared** tab and on the
-web page's Explore — both work without an account.
+the file's page in My Account) only makes that one file downloadable; it does
+not add anything to Templates. Public templates and shared files are listed on
+the window's **Web** tab and on the web page's Explore — both work without an
+account.
 
 | | Web page | Desktop window | CLI |
 | --- | --- | --- | --- |
 | Browse, download, apply templates (no account needed) | ✅ | ✅ | ✅ |
-| Publish a template | ✅ New template | ✅ Publish folder… | ✅ `template publish` |
+| Publish a template | ✅ New template | ✅ Publish template… | ✅ `template publish` |
 | Upload, download, share your files | ✅ | ✅ | ✅ |
-| Download files others shared (no account needed) | ✅ Explore | ✅ Shared tab | ✅ `download` |
+| Download files others shared (no account needed) | ✅ Explore | ✅ Web tab | ✅ `download` |
 
 ### 🌐 Web UI
 
@@ -184,9 +185,9 @@ cd eznit_<tag>_linux_amd64
 ./eznit-gui                                    # the window, from inside the bundle
 ```
 
-Run the window **from inside the extracted folder**: the Server tab looks for
+Run the window **from inside the extracted folder**: the Local server tab looks for
 `eznit` beside it. The window is a client first — type any eznit API into the **Files**
-header and **Connect** — and a host second: the Server tab runs the server in
+header and **Connect** — and a host second: the Local server tab runs the server in
 that folder. Its first run is **Server → Configuration → Create .env → set the
 database password → Save → Start**: **Start** brings up the database and applies
 the migrations through the folder's own Compose services when nothing answers, so

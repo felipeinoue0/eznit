@@ -305,11 +305,11 @@ The GUI reads `GUI_API_URL` (the default server address), `-api` and
 `~/.eznit/config.json` beside the CLI's: `api_url`, `api_local`, `token` and
 `server_dir`. The address is resolved as `-api`, then `GUI_API_URL`, then the
 saved address, then this machine, and the last one is a **mode**: a window that
-has never chosen is local, so both tabs start on the server the Server tab would
-run. The Files and Templates headers carry the same bar — a **Use this machine**
-checkbox, the address field, **Test** (a `/v1/healthcheck` call that saves
-nothing), **Connect** (validate, then switch) and the source line; Files adds
-**Sign out**. Checked, the field follows the Server tab's folder and is shut;
+has never chosen is local, so both tabs start on the server the Local server tab
+would run. The Web and My Account headers carry the same bar — a **Use this
+machine** checkbox, the address field, **Test** (a `/v1/healthcheck` call that
+saves nothing), **Connect** (validate, then switch) and the source line; My
+Account adds **Sign out**. Checked, the field follows the Local server tab's folder and is shut;
 unchecked, the saved or typed address is used. The choice is stored as
 `api_local`, and a flag or environment address arrives unchecked because an
 explicit override is not "this machine". `apiclient.ValidateBaseURL` and
@@ -317,24 +317,25 @@ explicit override is not "this machine". `apiclient.ValidateBaseURL` and
 still belongs to it: a different host means a different instance, so the token
 is forgotten — after a confirmation — and the login form follows, while a port
 change on one host keeps the session. A **Connect** is not a login: with no
-token in the window it lands on the login form whatever address it names, so the
-Files tab never shows a library it has nothing to fill. The tab's actions stay
-disabled until a listing has answered, so a wrong address cannot look like an
-empty library.
+token in the window it lands on the login form whatever address it names, so My
+Account never shows a library it has nothing to fill. Its Upload and Publish
+stay disabled until a listing has answered, so a wrong address cannot look like
+an empty account.
 
 A failed listing is read by its answer, not only by its arrival. `401` means the
 API judged the token and refused it, so the window forgets the session and the
 login form follows; anything else — no answer, a 5xx — leaves the token alone
 and puts a **Cannot reach this server** panel in the tab, with **Try again** and
-the address bar still above it. The panel exists because a table with no rows
+the address bar still above it. The panel exists because a list with no rows
 and a status line under it reads as "signed in, nothing here", which is exactly
 what the window cannot know. `apiclient.ErrUnreachable` is what separates the two
 cases in Go.
 
-The session belongs to the Files tab: it is the tab that shows the login form
+The session belongs to My Account: it is the tab that shows the login form
 when there is no token, and its header carries **Sign out**. Signing out removes
 only `token` — the address, the server folder and the git-host tokens stay — and
-drops the catalogue, which is per account. The About tab is the window's
+drops the account's list and the Web list (whose owner names depend on the
+session). The About tab is the window's
 identity and its update controls; it holds nothing about a session.
 
 A session reaches a request through an **immutable client**: `u.client` is
@@ -343,7 +344,7 @@ side before it starts, so a request in flight never reads a token the UI is
 changing — sign-out and connect are writes to the window, not to the client.
 That is what lets the window's suite run under `-race` (see `make fyne_race`).
 
-The Server tab reads the env file of `server_dir` — the folder the window was
+The Local server tab reads the env file of `server_dir` — the folder the window was
 installed into unless another is chosen with **Browse…** or typed into the
 folder field and committed with **Use** — and starts `eznit serve` from it as a
 child process, with that file as its environment. A folder from an older release
@@ -364,13 +365,21 @@ a decision. "Reset to default" removes the key and returns to the folder
 controls refuse while the server runs, because the process belongs to the folder
 it was started from.
 
-The Templates tab reads the catalogue (`GET /v1/templates`, `/mine` and `/{id}`,
-the first two with an optional session so a caller's own private templates are
-in the answer) and writes an offline bundle with `templates.NewBundle` and
-`templates.WriteBundle`. The table keeps four columns — name, kind, version,
-files — because owner and visibility are read once, in the selected template's
-summary; the summary is followed by three tabs carrying their counts, so a
-template's contents are one pane rather than a long scroll. That pair comes from `internal/domain/templates` rather
+The window's tabs are **Web**, **My Account**, **Local server** and **About**
+(#373). Web and My Account share one shape (`internal/fyneui/entries.go`): a
+Templates / Files / All filter, a `widget.List` of whole rows — an icon, the
+name over one line of facts, and **Download** at the right edge — and a detail
+page with **Back** that replaces the list when a row is opened. A row is
+selected as a whole; the old tables selected one cell at a time, and a cell said
+nothing the row did not. **Web** lists what anyone made public — the public
+templates of `GET /v1/templates` and `GET /v1/files/shared` — and needs no
+session. **My Account** lists the account's own files (`GET /v1/files`) and
+templates (`GET /v1/templates/mine`), with **Upload file…** and **Publish
+template…**; a file's page keeps Download, Share/Unshare, Delete and the two
+copies. A template row's Download fetches `/{id}` and writes the offline bundle
+with `templates.NewBundle` and `templates.WriteBundle`; its page shows the
+summary followed by three tabs carrying their counts, with **Save as bundle…**
+and **Apply…**. That pair comes from `internal/domain/templates` rather
 than being copied into the client: the bundle format has one definition, shared
 with `template export`, so the window cannot write a file the CLI refuses to
 read. It is a data dependency — DTOs and the bundle — and `apiclient` returns

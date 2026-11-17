@@ -40,7 +40,7 @@ const followTolerance = 24
 // folder, watch what it prints, and edit the .env beside it.
 //
 // It is a control panel, not a remote client: it drives a process on this
-// machine. A server elsewhere is reached from the Files tab, with an address.
+// machine. A server elsewhere is reached from My Account, with an address.
 type serverView struct {
 	ui *ui
 
@@ -247,12 +247,12 @@ func (v *serverView) resetDir() {
 	}
 
 	if v.folderPath() == defaultServerDir() {
-		v.setNote("The Server tab is already using the folder this window was installed in.")
+		v.setNote("The Local server tab is already using the folder this window was installed in.")
 		return
 	}
 
 	body := widget.NewLabel(fmt.Sprintf(
-		"Point the Server tab back at the default folder?\n\nThe window was installed in: %s\nIt is using: %s\n\nNo .env and no secret file is changed.",
+		"Point the Local server tab back at the default folder?\n\nThe window was installed in: %s\nIt is using: %s\n\nNo .env and no secret file is changed.",
 		defaultServerDir(), v.folderPath()))
 	body.Wrapping = fyne.TextWrapWord
 	body.Selectable = true
@@ -1528,7 +1528,7 @@ func (v *serverView) notBundleNote() string {
 	return fmt.Sprintf(
 		"This folder is not a server bundle: it has no %s. A bundle is the extracted release archive — "+
 			"run eznit-gui from inside it, or choose that folder with Choose folder…. "+
-			"To use a server that already runs, type its address on the Files tab instead.",
+			"To use a server that already runs, type its address on My Account instead.",
 		strings.Join(v.bundle.Missing(), " and "))
 }
 

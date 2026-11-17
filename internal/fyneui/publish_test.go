@@ -89,10 +89,10 @@ func TestBuildPublishRequest(t *testing.T) {
 func TestPublishSignedOutSaysWhere(t *testing.T) {
 	u := newTestUI(t)
 
-	u.templates.publishFolder()
+	u.account.publishFolder()
 
-	if u.templates.status.Text != publishSignedOut {
-		t.Errorf("status = %q, want %q", u.templates.status.Text, publishSignedOut)
+	if u.account.status.Text != publishSignedOut {
+		t.Errorf("status = %q, want %q", u.account.status.Text, publishSignedOut)
 	}
 	if overlay := u.window.Canvas().Overlays().Top(); overlay != nil {
 		t.Errorf("a dialog opened without a session: %T", overlay)
@@ -100,8 +100,8 @@ func TestPublishSignedOutSaysWhere(t *testing.T) {
 }
 
 // The whole form, end to end against a fake API: the folder is read by the
-// shared walk, Publish sends the CLI's request with the session, and the tab
-// confirms and reloads its catalogue.
+// shared walk, Publish sends the CLI's request with the session, and My Account
+// confirms and reloads its list.
 func TestPublishFormSendsTheTemplate(t *testing.T) {
 	var (
 		mu       sync.Mutex
@@ -118,6 +118,8 @@ func TestPublishFormSendsTheTemplate(t *testing.T) {
 			mu.Unlock()
 			w.WriteHeader(http.StatusCreated)
 			_, _ = w.Write([]byte(`{"data":{"id":"6f1c1f18-5c2e-4b1e-9d0e-6a1f3b3c0a11","name":"demo","version":1,"is_public":true}}`))
+		case r.Method == http.MethodGet && r.URL.Path == "/v1/files":
+			_, _ = w.Write([]byte(`{"data":{"data":[],"total":0}}`))
 		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/v1/templates"):
 			_, _ = w.Write([]byte(`{"data":{"data":[{"id":"6f1c1f18-5c2e-4b1e-9d0e-6a1f3b3c0a11","name":"demo","kind":"generic","version":1,"file_count":2}],"total":1}}`))
 		default:
@@ -147,7 +149,7 @@ func TestPublishFormSendsTheTemplate(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	form := u.templates.showPublishForm(root, files, skipped)
+	form := u.account.showPublishForm(root, files, skipped)
 	if u.window.Canvas().Overlays().Top() == nil {
 		t.Fatal("the publish form did not open")
 	}
@@ -175,10 +177,10 @@ func TestPublishFormSendsTheTemplate(t *testing.T) {
 	if len(received.Variables) != 1 || received.Variables[0].Key != "PROJECT_NAME" || !received.Variables[0].Required {
 		t.Errorf("variables = %+v, want PROJECT_NAME, required", received.Variables)
 	}
-	if !strings.Contains(u.templates.status.Text, "Published demo") {
-		t.Errorf("status = %q, want the publish confirmation (not the template count)", u.templates.status.Text)
+	if !strings.Contains(u.account.status.Text, "Published demo") {
+		t.Errorf("status = %q, want the publish confirmation (not the template count)", u.account.status.Text)
 	}
-	if len(u.templates.items) != 1 {
-		t.Errorf("the catalogue was not reloaded: %d rows", len(u.templates.items))
+	if len(u.account.templates) != 1 {
+		t.Errorf("the account was not reloaded: %d template(s)", len(u.account.templates))
 	}
 }

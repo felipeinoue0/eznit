@@ -16,7 +16,7 @@ import (
 	"github.com/fiwon123/eznit/internal/apiclient"
 )
 
-// newTestLogin builds the sign-in form in the Files tab, which is where it
+// newTestLogin builds the sign-in form on My Account, which is where it
 // lives: the login form is that tab's content when there is no token.
 func newTestLogin(t *testing.T, signup bool) *loginView {
 	t.Helper()
@@ -25,7 +25,8 @@ func newTestLogin(t *testing.T, signup bool) *loginView {
 
 	view := newLoginView(u, "", statusIdle)
 	view.signup = signup
-	u.setFilesTab(view.content())
+	u.setAccountTab(view.content())
+	u.tabs.Select(u.accountTab)
 
 	return view
 }
@@ -43,7 +44,7 @@ func TestLoginHasOnePrimaryAction(t *testing.T) {
 			view := newTestLogin(t, signup)
 
 			primary := 0
-			for _, button := range allButtons(view.ui.tabs.Items[0].Content) {
+			for _, button := range allButtons(view.ui.accountTab.Content) {
 				if button.Importance == widget.HighImportance {
 					primary++
 				}
@@ -65,7 +66,7 @@ func TestLoginPutsThisMachineWithTheServerField(t *testing.T) {
 	view.ui.window.Content().Resize(fyne.NewSize(980, 640))
 	relayout(view.ui.window.Content())
 
-	if !sharesParent(view.ui.tabs.Items[0].Content, view.api, view.local.row) {
+	if !sharesParent(view.ui.accountTab.Content, view.api, view.local.row) {
 		t.Error("'Use this machine' is not in the Server field's cell")
 	}
 
@@ -183,7 +184,7 @@ func TestLoginCardFitsBothModes(t *testing.T) {
 
 			// The cell has to fit the tab as well, or the window clips the card
 			// and not one of its own rows.
-			if room := view.ui.tabs.Items[0].Content.Size(); size.Height > room.Height {
+			if room := view.ui.accountTab.Content.Size(); size.Height > room.Height {
 				t.Errorf("the card needs %.0f px of height but the tab gives it %.0f",
 					size.Height, room.Height)
 			}
@@ -197,7 +198,7 @@ func TestLoginCardFitsBothModes(t *testing.T) {
 func TestLoginShowsWhatSignupNeeds(t *testing.T) {
 	signup := newTestLogin(t, true)
 
-	if !holds(signup.ui.tabs.Items[0].Content, signup.hint) {
+	if !holds(signup.ui.accountTab.Content, signup.hint) {
 		t.Fatal("the signup form does not show what an account needs")
 	}
 
@@ -208,7 +209,7 @@ func TestLoginShowsWhatSignupNeeds(t *testing.T) {
 
 	login := newTestLogin(t, false)
 
-	if holds(login.ui.tabs.Items[0].Content, login.hint) {
+	if holds(login.ui.accountTab.Content, login.hint) {
 		t.Error("the log-in form shows the signup requirements")
 	}
 }

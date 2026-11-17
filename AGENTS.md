@@ -109,6 +109,11 @@ about the sandbox made from inside it cannot be about the host's Docker.
   `opencode.json`, Claude Code through the imports in `CLAUDE.md`; any other
   agent must read them at the start of a session. `.opencode/` is where they
   live, not a statement about which agent runs.
+- **An agent target starts the dev loop too.** `make claude` (and every other
+  agent target, and `python scripts/dev-up.py claude` on Windows) starts the API
+  on :4000 and the UI on :5173 beside the agent, so the page is there while it
+  works. A running sandbox is never recreated; `AGENT_LOOP=0` starts the sandbox
+  alone.
 - **Sign in once per project.** Each agent asks for its login on first run —
   paste an API key or sign in with an account — and writes it to its own state
   directory, which is a named Docker volume (`docker-compose.yml`). It survives

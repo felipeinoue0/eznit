@@ -37,24 +37,28 @@ machine next to it is solving the wrong problem.
   repositories ([#188](https://github.com/fiwon123/eznit/issues/188), v0.18.0);
   a token never reaches the API.
 - A git-host token stays on the CLI machine, one config key per host.
-- **The desktop window names its server** — the Files tab shows the address it
-  talks to and where that address came from. One address bar serves the Files
-  and Templates tabs: **Use this machine** (remembered, checked by default) or a
+- **The desktop window names its server** — each tab shows the address it
+  talks to and where that address came from. One address bar serves the Web
+  and My Account tabs: **Use this machine** (remembered, checked by default) or a
   typed address, with **Test** and **Connect** ([#248](https://github.com/fiwon123/eznit/issues/248),
   v0.25.0; editable and shared since v0.30.0). A different host signs you out,
   because a session belongs to the server that issued it.
-- **Templates, from the window** — a Templates tab lists the catalogue (filtered
-  by kind or to your own) in four columns, shows the selected template's
-  summary and its files, variables and commands in counted tabs, writes the
+- **Templates, from the window** — the catalogue is listed in the window, and a
+  template's page shows its summary and its files, variables and commands in counted tabs, writes the
   offline `.eznit` bundle the CLI reads ([#260](https://github.com/fiwon123/eznit/issues/260)),
   and applies a template into a folder with the same rules `template apply`
   uses — safe paths, no silent overwrite, the check before the questions
   ([#259](https://github.com/fiwon123/eznit/issues/259), v0.26.0), and publishes a
-  folder with **Publish folder…** — the CLI's folder walk behind a form
+  folder with **Publish template…** — the CLI's folder walk behind a form
   ([#367](https://github.com/fiwon123/eznit/issues/367), v0.34.0).
-- **Shared files, from the window** — a **Shared** tab lists every file anyone
-  made public, with Download, and works without an account
+- **Shared files, from the window** — every file anyone made public, with
+  Download, without an account
   ([#368](https://github.com/fiwon123/eznit/issues/368), v0.34.0).
+- **Web, My Account, Local server** — the window's tabs regrouped
+  ([#373](https://github.com/fiwon123/eznit/issues/373), v0.35.0): **Web**
+  (first) lists public templates and shared files, **My Account** the
+  account's own, both with a Templates / Files / All filter, whole-row
+  selection, a Download on every row and a page with **Back** per item.
 
 ## 📱 Device-to-device over cthrone — not implemented
 
