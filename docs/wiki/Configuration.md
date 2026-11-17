@@ -107,6 +107,14 @@ refuses to start while the other runs, and tells you the command that stops it.
 | `API_BIND` | 🌍 `0.0.0.0` | set `127.0.0.1` behind a reverse proxy |
 | `WEB_BIND` | 🌍 `0.0.0.0` | set `127.0.0.1` behind a reverse proxy |
 
+**HTTPS on a public server.** `make vps-init DOMAIN=…` sets all of these at once:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `DOMAIN` | *(none)* | the host name the `caddy` service gets a certificate for |
+| `COMPOSE_PROFILES` | *(none)* | `https` adds the `caddy` service to a plain `docker compose up` |
+| `TRUST_PROXY` | `false` | `true`, see [Rate limiting](#-auth-rate-limiting) |
+
 > [!CAUTION]
 > **Docker's own firewall rules bypass `ufw`.** On a VPS, the bind address, not
 > the firewall, is what keeps a port off the internet. Never set `DB_BIND=0.0.0.0`
@@ -156,10 +164,12 @@ DB_NAME="eznit"
 
 API_SERVE_WEB="true"
 
-# On a VPS, behind a reverse proxy:
-# API_BIND="127.0.0.1"
-# WEB_BIND="127.0.0.1"
-# TRUST_PROXY="true"
+# On a VPS (make vps-init DOMAIN=... writes these):
+# API_BIND=127.0.0.1
+# WEB_BIND=127.0.0.1
+# TRUST_PROXY=true
+# DOMAIN=eznit.example.com
+# COMPOSE_PROFILES=https
 ```
 
 Compose overrides `DB_HOST` / `DB_PORT` for the in-network services (`db:5432`).
