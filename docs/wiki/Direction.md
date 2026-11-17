@@ -1,85 +1,64 @@
+<sub>🏠 [Home](https://github.com/fiwon123/eznit/wiki) › 🧭 Direction</sub>
+
 # 🧭 Direction
 
-This page is the one place a promise is allowed. Planned work is marked **not
-implemented**, with its issue; what has landed is listed as shipped. The issue
-is the source of truth for both.
+**This page is the one place a promise is allowed.** Planned work is marked
+**not implemented**, with its issue, and what has landed is listed with the
+release that shipped it. The issues are the source of truth for both.
 
-The principle behind the list: one file or one command per step, and the offline
-paths need no account. A setup tool that requires a server to hand a file to the
-machine next to it is solving the wrong problem.
+> [!NOTE]
+> **The principle:** one file or one command per step, and the offline paths need no
+> account. A setup tool that needs a server to hand a file to the machine next to it
+> is solving the wrong problem.
+
+## 🔭 Planned
+
+| | Status | Issue |
+| --- | --- | --- |
+| 📱 **Device-to-device over [cthrone](https://github.com/fiwon123/cthrone)**: send a template bundle to a second machine (a laptop, a tablet, a machine on the same network) with no account and no server on either side | 🟡 not implemented: the most work of anything here | none yet |
+
+> [!TIP]
+> If a feature would change how you use eznit today,
+> [open an issue](https://github.com/fiwon123/eznit/issues/new) and say so. This
+> is a direction, not a schedule.
 
 ## ✅ Shipped
 
-- **Offline template bundles** — `eznit template export <id> -o setup.eznit`
-  writes a template and its files to one JSON file, and
-  `eznit template apply --from-file setup.eznit` writes it on a machine with no
-  server and no account ([#184](https://github.com/fiwon123/eznit/issues/184),
-  v0.14.0). The same path rules and limits are checked on read, and values are
-  asked locally.
-- **Crower packs** — `eznit command export --crower pack.toml` and
-  `eznit command import --crower pack.toml` move the command library between
-  eznit and [crower](https://github.com/fiwon123/crower)
-  ([#185](https://github.com/fiwon123/eznit/issues/185), v0.15.0). A script maps
-  to `Exec`; `Steps` win on import, as they do in crower. Aliases, env, shell,
-  cwd and timeout are reported and not kept; binary commands cannot be exported.
-- **macOS archives** — `darwin/amd64` and `darwin/arm64` archives were published
-  and verified as Mach-O, cross-compiled on Linux
-  ([#187](https://github.com/fiwon123/eznit/issues/187), v0.17.0). No gate runs
-  them on a Mac.
-- **Shell starters** — `eznit template init --kind bash|zsh|fish|powershell`
-  writes `shell/bashrc.sh`, `shell/zshrc.sh`, `shell/config.fish` or
-  `shell/profile.ps1`: commented snippets you source yourself
-  ([#186](https://github.com/fiwon123/eznit/issues/186), v0.16.0). Templates can
-  still carry any shell file, starter or not.
-- `eznit template init` writes a starter with no server and no account.
-- The command library keeps a script once and pulls it into templates by id.
-- **GitHub, GitLab and Bitbucket** tokens on your machine list and clone
-  repositories ([#188](https://github.com/fiwon123/eznit/issues/188), v0.18.0);
-  a token never reaches the API.
-- A git-host token stays on the CLI machine, one config key per host.
-- **The desktop window names its server** — Settings → Server shows the address
-  it talks to and where that address came from, and is the one place to change
-  it: **Use this machine** (remembered, checked by default) or a
-  typed address, with **Test** and **Connect** ([#248](https://github.com/fiwon123/eznit/issues/248),
-  v0.25.0; editable and shared since v0.30.0). A different host signs you out,
-  because a session belongs to the server that issued it.
-- **Templates, from the window** — the catalogue is listed in the window, and a
-  template's page shows its summary and its files, variables and commands in counted tabs, writes the
-  offline `.eznit` bundle the CLI reads ([#260](https://github.com/fiwon123/eznit/issues/260)),
-  and applies a template into a folder with the same rules `template apply`
-  uses — safe paths, no silent overwrite, the check before the questions
-  ([#259](https://github.com/fiwon123/eznit/issues/259), v0.26.0), and publishes a
-  folder with **Publish template…** — the CLI's folder walk behind a form
-  ([#367](https://github.com/fiwon123/eznit/issues/367), v0.34.0).
-- **Shared files, from the window** — every file anyone made public, with
-  Download, without an account
-  ([#368](https://github.com/fiwon123/eznit/issues/368), v0.34.0).
-- **Web, My Account, Local server** — the window's tabs regrouped
-  ([#373](https://github.com/fiwon123/eznit/issues/373), v0.35.0): **Web**
-  (first) lists public templates and shared files, **My Account** the
-  account's own, both with a Templates / Files / All filter, whole-row
-  selection, a Download on every row and a page with **Back** per item.
-- **Settings, account button, previews** ([#376](https://github.com/fiwon123/eznit/issues/376),
-  v0.36.0) — tabs Web · Local server · Settings · About with **My Account** as
-  a button at the right of the bar; the server chosen on Settings only; a
-  dropdown filter; a template's files as a folder tree with a preview; a file
-  previewed before download; your own files and templates switch Private ↔
-  Public after a confirmation.
-- **Explore, Workspace, Settings** ([#379](https://github.com/fiwon123/eznit/issues/379),
-  v0.37.0) — Web is **Explore**; **Workspace** (was My Account) is a tab that
-  appears once logged in; **Log in / Log out**, **Settings** and **About** sit
-  at the right of the bar; Settings holds **Server**, **Local server** and
-  **Reset**, which erases the local server's data after a confirmation and
-  keeps its configuration.
+### 🛡️ Operating it
 
-## 📱 Device-to-device over cthrone — not implemented
+| Release | What |
+| --- | --- |
+| **v0.38.0** | **Deploying on a VPS**: `make backup` / `make restore` (database **and** uploads, with a safety backup before every restore), the database bound to `127.0.0.1` by default, `API_BIND` / `WEB_BIND` for a reverse proxy ([#388](https://github.com/fiwon123/eznit/issues/388)) |
+| **v0.38.0** | The window uses **the operating system's file and folder dialogs**, with the built-in one as a fallback ([#392](https://github.com/fiwon123/eznit/issues/392)); **Reset** says how to reset another folder ([#390](https://github.com/fiwon123/eznit/issues/390)) |
+| **v0.37.2** | Start and Reset refuse a database **another stack** holds on the port, instead of failing with `exit status 1` ([#385](https://github.com/fiwon123/eznit/issues/385)) |
+| **v0.37.1** | Settings → Local server keeps the page margins, and the folder gets its own row ([#382](https://github.com/fiwon123/eznit/issues/382)) |
 
-No issue yet — the most work of anything here.
+### 🖥️ The desktop window
 
-[cthrone](https://github.com/fiwon123/cthrone) pairs two devices with no account
-and no server. The plan is to send a template bundle over it, so a second
-machine (a laptop, a tablet, a machine on the same network) receives a setup
-without either side running eznit's API.
+| Release | What |
+| --- | --- |
+| **v0.37.0** | **Explore** and **Workspace** tabs (Workspace once signed in); **Log in / Log out**, **Settings** and **About** on the right; Settings holds **Server**, **Local server** and **Reset** ([#379](https://github.com/fiwon123/eznit/issues/379)) |
+| **v0.36.0** | A template's files as a folder tree with a preview, file previews before download, Private ↔ Public after a confirmation ([#376](https://github.com/fiwon123/eznit/issues/376)) |
+| **v0.35.0** | Tabs regrouped, with a Templates / Files / All filter, whole-row selection, Download on every row ([#373](https://github.com/fiwon123/eznit/issues/373)) |
+| **v0.34.0** | **Publish template…** from a folder ([#367](https://github.com/fiwon123/eznit/issues/367)); **shared files** listed with Download, with no account needed ([#368](https://github.com/fiwon123/eznit/issues/368)) |
+| **v0.26.0** | Templates in the window: browse, export the `.eznit` bundle ([#260](https://github.com/fiwon123/eznit/issues/260)), apply into a folder with the CLI's rules ([#259](https://github.com/fiwon123/eznit/issues/259)) |
+| **v0.25.0** | The window **names its server** and is the one place to change it; a new host signs you out ([#248](https://github.com/fiwon123/eznit/issues/248)) |
 
-If a feature on this page would change how you use eznit today, open the issue
-and say so — the plan is a direction, not a schedule.
+### 🧩 Templates and the CLI
+
+| Release | What |
+| --- | --- |
+| **v0.18.0** | **GitHub, GitLab and Bitbucket**: list and clone with a token that never reaches the API ([#188](https://github.com/fiwon123/eznit/issues/188)) |
+| **v0.17.0** | **macOS archives**, amd64 and arm64, verified as Mach-O ([#187](https://github.com/fiwon123/eznit/issues/187)) |
+| **v0.16.0** | **Shell starters**: `template init --kind bash\|zsh\|fish\|powershell` ([#186](https://github.com/fiwon123/eznit/issues/186)) |
+| **v0.15.0** | **Crower packs**: `command export/import --crower` ([#185](https://github.com/fiwon123/eznit/issues/185)) |
+| **v0.14.0** | **Offline bundles**: `template export` and `apply --from-file`, with no server and no account ([#184](https://github.com/fiwon123/eznit/issues/184)) |
+| earlier | `template init` offline starters; a command library pulled into templates by id; git-host tokens kept per host on the CLI machine |
+
+## 👉 Next
+
+| | |
+| --- | --- |
+| 🗺️ [Roadmap board](https://github.com/users/fiwon123/projects/12) | planned work, live |
+| 📦 [Releases](https://github.com/fiwon123/eznit/releases) | every version and its notes |
+| 🏠 [Home](https://github.com/fiwon123/eznit/wiki) | back to the start |

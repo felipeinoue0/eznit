@@ -1,235 +1,257 @@
+<sub>🏠 [Home](https://github.com/fiwon123/eznit/wiki) › 🛡️ Operate › 🧯 Troubleshooting</sub>
+
 # 🧯 Troubleshooting
 
-The errors you are most likely to hit, and the fix.
+**Find your symptom, then apply the fix.** Each entry names the cause first,
+because the cause usually is the fix.
 
-## `ERROR: DB_USER, DB_HOST and DB_NAME are not set`
+| Area | Symptoms |
+| --- | --- |
+| 🧩 [Templates](#-templates) | apply stops · publish skips a file · 401 |
+| 🖥️ [Window: Local server](#%EF%B8%8F-window-local-server) | not a bundle · database could not be prepared · password failed · port in use · starts and stops |
+| 🪟 [Window: startup](#-window-startup) | GL or display error · `GLIBC_2.38 not found` |
+| 🔄 [Updates](#-updates) | download refused · old version after an update |
+| 🐳 [Stack and sandbox](#-stack-and-sandbox) | missing secret · port already in use · UI loads but requests fail · sandbox permission errors |
+| ✅ [Gates](#-gates) | `make check` green but nothing tested · migration variables missing |
 
-The migration targets need a database connection. Copy `.env.example` to `.env`,
-fill it in, and try again. `make check` and `make build` do not need it.
-`make setup` creates the file for you.
+> [!TIP]
+> Most window errors open a dialog with the runtime's full output and a **Copy
+> output** button. Paste that output into an
+> [issue](https://github.com/fiwon123/eznit/issues/new). It nearly always names
+> the cause.
 
-## `make check` passes, but nothing seems tested
+---
 
-`make check` prints the packages it did not cover at the end of a green run.
-That list is short now — `cmd/cli` is the only package with no test file — but a
-green `make check` still means "the tested packages passed and the rest
-compiled", not "it works". SQL is covered by `make test_integration`, not by
-`make check`.
+## 🧩 Templates
 
-## `template apply` stops without writing anything
+### `template apply` stops without writing anything
 
-One of the target files already exists. `apply` refuses to overwrite without
-`--force`, and it checks every file before writing any of them. Move the
-conflict, or rerun with `--force`.
+**Cause:** one of the target files already exists. `apply` checks every file
+before writing any of them.
+**Fix:** move the conflicting file, or rerun with `--force`.
 
-## `template publish` skips a file, or the server refuses one
+### `template publish` skips a file, or the server refuses one
 
-Symlinks are skipped (a template is files, not links), and the limits are 256 KiB
-per text file, 4 MiB of text per template, 10 MiB per binary file, 32 MiB in
-total and 200 files. The CLI checks them before uploading and names the file.
+**Cause:** a symlink (a template holds files, not links) or a limit: 256 KiB per
+text file, 4 MiB of text in total, 10 MiB per binary file, 32 MiB in total, 200
+files. The CLI checks these before uploading and names the file.
 
-## `template apply <id>` answers 401
+### `template apply <id>` answers 401
 
-A private template needs a session: run `eznit login`. Public templates apply
-without one.
+**Cause:** a private template needs a session.
+**Fix:** `eznit login`. Public templates apply without one.
 
-## `eznit-gui` exits with a GL or display error
+---
 
-Fyne needs OpenGL at run time. The released Linux window links exactly two
-libraries of its own — `libGL.so.1` and `libwayland-client.so.0` — so install
-`libgl1` and `libwayland-client0` (Debian/Ubuntu) plus a working GL driver, and
-run it on a machine with a display. It is a desktop window, not a server
-component; a headless machine should use the CLI and the server's web UI.
+## 🖥️ Window: Local server
 
-Building it is a different requirement: `make build_gui` needs cgo and the GL/
-X11 **headers**; if `pkg-config` cannot find `gl.pc`, the headers are missing.
+### "not a server bundle"
 
-## `version 'GLIBC_2.38' not found` from `eznit-gui` (v0.23.0 and earlier)
+**Cause:** Settings → Local server runs `eznit serve` from the **binary beside
+the window**, and the chosen folder has none.
+**Fix:** extract the release archive (one per platform holds the window, the
+server, the migrations and the Compose file) and run `eznit-gui` from inside it,
+or point **Browse…** at that folder. The note under the header names what is
+missing.
 
-Those releases built the Linux window on a current runner, so the download
-required glibc 2.38 — newer than Debian 12 (2.36) and Ubuntu 22.04 (2.35). The
-window in **v0.23.1 and later** is linked inside a Debian 12 image and needs
-only glibc **2.34**; use the CLI (`eznit`, `ez`) in the meantime, which is
-`CGO_ENABLED=0` and unaffected.
+> [!NOTE]
+> You only need a local server to *run* one. To use a server that already runs,
+> type its address in **Settings → Server** and **Connect**.
 
-## Settings → Local server says "not a server bundle"
+### "The database could not be prepared"
 
-The panel runs `eznit serve` from the **binary beside the window**, and the
-folder it is pointed at does not have one. Since v0.24.0 the release publishes **one archive
-per platform** that carries the window, the server, the migrations and the
-Compose file together, so there is no separate server download: extract the
-archive you already have and run `eznit-gui` from inside it (or point the tab at
-that folder with **Choose folder…**).
+Before **Start** runs the API, a step prepares the database, and its message names the
+missing piece:
 
-The note under the header names what the folder is missing. If you only want to
-use a server that already runs, the local server is not needed — type its address
-into **Settings → Server** and **Connect**. The README's "From a download, in one
-minute" block has the same steps.
+| Message | Fix |
+| --- | --- |
+| no `docker-compose.yml` | The folder is not a bundle. Start a PostgreSQL yourself and set `DB_HOST` / `DB_PORT`. |
+| no container runtime on PATH | Install Docker or Podman (Fedora: `podman-compose`), or start a PostgreSQL yourself. |
+| no `secrets/db_password.txt` | Set the password in **Configuration** and save. Postgres keeps it from the volume's creation. |
+| **another database already answers** on this folder's `DB_HOST` and `DB_PORT` | Something else holds the port, usually another eznit stack (a checkout's `make dev-up` publishes 5432). Stop it (`make dev-down` there) or set another `DB_PORT` (for example 5433) in **Configuration**. |
+| did not answer after it was started | Press **Start** again. A first image pull or a slow disk can outlast the 30-second wait. `docker compose logs db` says the rest. |
 
-## Settings → Local server says the port is in use
+> [!NOTE]
+> **Reset** refuses the "another database" case too, and erases nothing. Before
+> **v0.37.2** both failed instead with
+> `docker compose run --rm migrate: exit status 1`, because Compose could not
+> start the folder's own `db` on the taken port.
 
-Something else already listens on `API_PORT` (4000 by default) — often a server
-this window started in another session, or `make run_api`. Stop it, or change
-the port in the configuration panel and save.
+### `password authentication failed for user "root"`
 
-## `password authentication failed for user "root"` in Settings → Local server
+The API reached PostgreSQL and the password did not match. There are two causes:
 
-The API reached PostgreSQL and the password did not match. Two causes:
+| Cause | Fix |
+| --- | --- |
+| **No password was sent.** The API reads `DB_PASSWORD_FILE` first, then `DB_PWD`. A folder without `secrets/db_password.txt` (or with an `.env` from before it existed) sends an empty one. | Set the password in **Configuration** and save. Since v0.32.0 Start refuses with a note instead. |
+| **The database kept an older password.** Postgres applies it when it *creates* its volume and never again. | Put the original password into **Configuration**, or change it inside the database ([how](https://github.com/fiwon123/eznit/wiki/Deploying-on-a-VPS#-changing-the-database-password)). Recreating the volume also works, **but deletes the data**. |
 
-- **Nothing was sent.** The API takes its password from `DB_PASSWORD_FILE` (a
-  path to a file), then `DB_PWD`. A bundle's `.env` points at
-  `secrets/db_password.txt`; a folder without that file — or with an `.env` that
-  predates it — sends an empty password. Since **v0.32.0** Start refuses with a
-  note when it would have to create or migrate the database and the secret is
-  missing; before it, the log was the only clue.
-- **The database kept an older password.** Compose applies `POSTGRES_PASSWORD`
-  when it *creates* its volume and never again, so changing the secret afterwards
-  does not change the database's password. Put the original password into
-  **Configuration**, or recreate the volume (`docker compose down -v`) — which
-  deletes the data.
+> [!WARNING]
+> A green status dot does not mean the database is fine. `/v1/healthcheck`
+> answers without touching the database, so the dot means "the process is up".
 
-The status dot does not help here: `/v1/healthcheck` answers without touching the
-database, by design, so a green dot says "the process is up", not "the database
-is fine".
+### "the port is in use"
 
-## Settings → Local server says the database could not be prepared
+**Cause:** something already listens on `API_PORT` (4000 by default). It is often a
+server this window started in another session, or a `make run_api`.
+**Fix:** stop it, or change the port in **Configuration** and save.
 
-The step that runs before **Start** names the piece that is missing:
+### The server starts and stops at once
 
-- *no `docker-compose.yml`* — the folder is not a bundle, or the file was left
-  behind; start a PostgreSQL yourself and set `DB_HOST`/`DB_PORT`.
-- *no container runtime on PATH* — install Docker or Podman (Fedora:
-  `podman-compose`), or start a PostgreSQL yourself.
-- *no `secrets/db_password.txt`* — set the database password on **Configuration**
-  and save; Postgres bakes its password in when it creates the volume.
-- *another database already answers on this folder's DB_HOST and DB_PORT* —
-  something else holds the port, most often another eznit stack (a checkout's
-  `make dev-up` publishes 5432). Stop it (`make dev-down` there), or set a
-  different `DB_PORT` (for example 5433) in **Configuration**. **Reset** refuses
-  the same case and erases nothing. Before v0.37.2 both failed instead with
-  `docker compose run --rm migrate: exit status 1`, because Compose could not
-  start the folder's own `db` on the taken port.
-- *did not answer after it was started* — press **Start** again; a first pull of
-  the images and a slow disk can outlast the 30-second wait. The database's own
-  log (`docker compose logs db`) says the rest. The full output is in the dialog,
-  with **Copy output**.
+Read the **Output** tab: the API prints why it exited. Usually the database is
+unreachable, so check `DB_HOST`, `DB_PORT` and that `secrets/db_password.txt` exists.
+If you run the API by hand, set `DB_PASSWORD_FILE` or `DB_PWD`.
 
-## The server starts and stops at once
+### A Stop takes a while
 
-Read the **Output** tab: the API prints why it exited. The usual cause is an
-unreachable database — check `DB_HOST`, `DB_PORT` and that
-`secrets/db_password.txt` exists (set it on the **Configuration** tab). The window
-creates a missing `.env` from `.env.example` and points it at a local database.
+That is the drain: the API gives in-flight requests up to 10 seconds. On Windows
+the stop is immediate, because Windows cannot deliver an interrupt to another
+process.
 
-## A stop takes a while
+---
 
-That is the drain: the API gives in-flight requests up to 10 seconds to finish.
-On Windows the stop is immediate — Windows cannot deliver an interrupt to
-another process, so the window kills it.
+## 🪟 Window: startup
 
-## `eznit update` refuses the download
+### `eznit-gui` exits with a GL or display error
 
-The updater fetches the release's `checksums.txt` **before** the archive and
-refuses a missing, malformed or mismatched entry. That is deliberate: an
-archive that does not match its published hash is not installed. Check that the
-release has both the archive and `checksums.txt`, and that the tag is
-`vMAJOR.MINOR.PATCH`. Only HTTPS is accepted.
+**Cause:** Fyne needs OpenGL at run time. The Linux window links `libGL.so.1` and
+`libwayland-client.so.0`.
+**Fix:** install `libgl1` and `libwayland-client0` (Debian/Ubuntu) and a working GL
+driver, and run it on a machine with a display. A headless server should use the CLI
+and the web UI.
 
-## `Install failed: checksums.txt has no entry`
+Building is a different requirement: `make build_gui` needs cgo and the GL/X11
+**headers**. If `pkg-config` cannot find `gl.pc`, the headers are missing.
 
-Versions up to **v0.28.0** asked for an archive name the release stopped
-publishing in **v0.24.0** (`eznit-cli_…` instead of `eznit_…`), so neither
-`eznit update` nor the window's **Install** could work. The fix ships in
-**v0.28.1**. A binary from v0.28.0 or earlier cannot fetch it — the name it
-asks for is the bug — so upgrade once by hand: download
-`eznit_v0.28.1_<os>_<arch>` from the release page, verify it against
-`checksums.txt`, extract it, and run the binary from the extracted folder (or
-replace the old one). From v0.28.1 on, the built-in update works again.
+<details>
+<summary><code>version 'GLIBC_2.38' not found</code> (v0.23.0 and earlier)</summary>
 
-## The update installed, but `-v` still shows the old version
+Those releases built the Linux window on a current runner, so it needed glibc 2.38,
+which is newer than Debian 12 (2.36) and Ubuntu 22.04 (2.35). From **v0.23.1** the
+window is linked inside a Debian 12 image and needs glibc **2.34**. The CLI is
+`CGO_ENABLED=0` and was never affected.
 
-The running process keeps the binary it started from. Restart `eznit` (or the
-window) to run the new one. `eznit update --revert` puts back the version saved
-by the last install.
+</details>
 
-A window on **v0.30.0 or earlier** can also come back as the old version after
-**Restart now**: the install renames the running binary to `<binary>.old`, and
-the old code then read its own path — which follows the running file into that
-backup — so the button started the backup. The install itself is fine; the new
-binary is at the original path. Close the window and start the application
-normally once. Fixed in **v0.30.1**, where Restart uses the path recorded before
-the swap.
+---
 
-## The API starts and immediately exits
+## 🔄 Updates
 
-Check the log for the connection error. The API reads `DB_PASSWORD_FILE` first and
-falls back to `DB_PWD`; Compose sets the former from the Docker secret. If you are
-running the API by hand, set one of them.
+### `eznit update` refuses the download
 
-## Permission denied reading a secret file
+**Cause (deliberate):** the updater fetches `checksums.txt` **before** the archive
+and refuses a missing, malformed or mismatched entry.
+**Fix:** check that the release has both the archive and `checksums.txt`, and that
+the tag is `vMAJOR.MINOR.PATCH`. Only HTTPS is accepted.
 
-The file is mode `600` and owned by another user. See
-[Configuration](https://github.com/fiwon123/eznit/wiki/Configuration#-files-and-secrets).
+### The update installed, but `-v` still shows the old version
 
-## `set: pipefail: invalid option name` (or `bad interpreter`) in the sandbox
+**Cause:** the running process keeps the binary it started from.
+**Fix:** restart `eznit` or the window. `eznit update --revert` puts back the
+previous version.
 
-The scripts run through the bind mount, so bash parses your working tree's bytes. A
-checkout made before the `.gitattributes` rule was added keeps CRLF endings, and
-`git status` stays clean while it does. Re-check the files out with LF endings:
+<details>
+<summary>Older versions: <code>checksums.txt has no entry</code> (≤ v0.28.0), Restart starts the old window (≤ v0.30.0)</summary>
 
-```sh
-git rm --cached -r . >/dev/null && git reset --hard
-```
+- **≤ v0.28.0** asked for an archive name the release stopped publishing in
+  v0.24.0 (`eznit-cli_…` instead of `eznit_…`). Upgrade once by hand: download
+  `eznit_v0.28.1_<os>_<arch>`, verify it against `checksums.txt`, extract it, and
+  run it from there. From v0.28.1 the built-in update works.
+- **≤ v0.30.0**: **Restart now** could start the backup (`<binary>.old`)
+  instead of the new binary. The install itself was fine. Close the window and
+  start it normally once. Fixed in v0.30.1.
 
-## `docker compose up` fails on a missing secret
+</details>
 
-The database secret is a file secret, so Compose refuses to start without it.
-`make setup` creates it from the committed example.
+---
 
-## `EACCES: permission denied, mkdir '/home/devuser/.cache/opencode'`, or `mkdir /go/pkg/mod/cache: permission denied` in the sandbox
+## 🐳 Stack and sandbox
 
-The sandbox's caches are Docker volumes, and Docker creates a mount destination the
-image does not contain **as root** — while the container runs as your UID. The image
-now creates those directories itself, so a sandbox built from the current
-`Dockerfile` is fine.
+### `docker compose up` fails on a missing secret
 
-A sandbox created **before** that fix keeps its old, root-owned volumes: Docker does
-not re-initialise a volume that already exists. Recreate them once:
+**Cause:** the database password is a file secret, and Compose refuses to start
+without it.
+**Fix:** `make setup` creates it from the committed example.
 
-```sh
-make dev-reset     # docker compose down --volumes
-make dev-up
-```
+### `bind: address already in use` on port 4000 or 5173
 
-`make dev-reset` also drops the `postgres-data` and `api-data` volumes — the
-database and the uploaded files — which is why it is not called `reset`. The
-migrations run again on the next `make dev-up`.
-
-## `bind: address already in use` on port 4000 or 5173
-
-The product and the dev loop publish the same two ports, and they are alternatives.
-Both entry points check before they start anything and say which one is running,
-instead of failing halfway with Docker's message:
+The product and the dev loop publish the same ports, so run one at a time:
 
 ```sh
 make docker_down      # stop the product, then: make dev-up
 make dev-down         # stop the dev loop, then: make up
 ```
 
-When the port belongs to something that is not this stack (a `make run_api` in
-another terminal, a second checkout), move one of them:
+When the port belongs to something else (a `make run_api`, a second checkout),
+move one of them:
 
 ```sh
-HOST_PORT=4001 make dev-up                     # the sandbox API
-WEB_PORT=5174 make dev-up                      # the dev UI (HMR follows it)
-API_PORT=4001 docker compose up                # the product API
-WEB_PORT=5174 docker compose up                # the product UI
+HOST_PORT=4001 make dev-up         # the sandbox API
+WEB_PORT=5174 make dev-up          # the dev UI (hot reload follows it)
+API_PORT=4001 docker compose up    # the product API
+WEB_PORT=5174 docker compose up    # the product UI
 ```
 
-## The UI loads on `:5173` but every request fails
+### The UI loads on `:5173` but every request fails
 
-The Vite dev server proxies `/v1` to the API, so an API that is not running looks
-like a broken UI: the page renders and the data does not. Check the API first —
-`curl -s -o /dev/null -w '%{http_code}\n' localhost:4000/v1/healthcheck` — then
-the sandbox log for a compile error (`make dev-log`). With `make dev-up` the log
-stream is attached, so the error is usually on screen.
+**Cause:** the UI proxies `/v1` to the API, so an API that is down looks like a broken
+UI.
+**Fix:** check the API first, then the sandbox log (`make dev-log`) for a compile
+error:
+
+```sh
+curl -s -o /dev/null -w '%{http_code}\n' localhost:4000/v1/healthcheck
+```
+
+### `EACCES: permission denied, mkdir '/home/devuser/.cache/opencode'` or `mkdir /go/pkg/mod/cache: permission denied`
+
+**Cause:** a sandbox created before the image made its own cache directories keeps
+the old root-owned volumes, because Docker never re-initialises an existing volume.
+**Fix:** recreate them once:
+
+```sh
+make dev-reset     # docker compose down --volumes
+make dev-up
+```
+
+> [!CAUTION]
+> `make dev-reset` also drops `postgres-data` and `api-data`, the dev database and
+> its uploaded files. That is why it is not called `reset`.
+
+### `set: pipefail: invalid option name` or `bad interpreter` in the sandbox
+
+**Cause:** a checkout from before the `.gitattributes` rule keeps CRLF line
+endings, and bash reads the bind-mounted bytes as they are.
+**Fix:** re-check the files out with LF endings:
+
+```sh
+git rm --cached -r . >/dev/null && git reset --hard
+```
+
+### Permission denied reading a secret file
+
+**Cause:** the file is mode `600` and owned by another user. See
+[Configuration → Files and secrets](https://github.com/fiwon123/eznit/wiki/Configuration#-files-and-secrets).
+
+---
+
+## ✅ Gates
+
+### `make check` passes, but nothing seems tested
+
+`make check` lists the packages it did not cover. Only `cmd/cli` has no test file
+today. A green run means "the tested packages passed and the rest compiled", **not**
+"it works". SQL is covered by `make test_integration`.
+
+### `ERROR: DB_USER, DB_HOST and DB_NAME are not set`
+
+**Cause:** the migration targets need a database connection.
+**Fix:** `make setup`, or copy `.env.example` to `.env` and fill it in. `make check`
+and `make build` do not need it.
+
+---
+
+## 🆘 Still stuck?
+
+[Open an issue](https://github.com/fiwon123/eznit/issues/new) with the command you
+ran, the full output (**Copy output** in the window), your OS, and `eznit -v`.

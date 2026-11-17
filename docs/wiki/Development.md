@@ -1,177 +1,167 @@
+<sub>🏠 [Home](https://github.com/fiwon123/eznit/wiki) › 🛠️ Build › 🔧 Development</sub>
+
 # 🔧 Development
 
-How to run eznit from source, the sandbox that removes the host-toolchain
-requirement, and the gates a change must pass.
+**How to run eznit from source, the sandbox that removes the host-toolchain
+requirement, and the gates a change must pass.**
+
+| I want to… | Run |
+| --- | --- |
+| ✅ verify a change | `make check` (+ `make web_check` for the UI) |
+| 🔁 work on the source with hot reload | `make dev-up` → UI :5173, API :4000 |
+| 🐳 run the product as users get it | `make up` |
+| 🤖 run an AI agent in the sandbox | `make claude` · `make codex` · `make opencode` |
+| 🩺 check the whole setup | `make doctor` |
 
 ## ✅ The gates
 
 ```sh
-make check     # gofmt, vet, test, build — the local verification gate
-make vuln      # reachable-dependency vulnerability scan (needs network)
-make web_check # oxlint, oxfmt, tsc --noEmit, vite build — the web gate
+make check            # gofmt, vet, test, build: the local gate
+make web_check        # oxlint, oxfmt, tsc --noEmit, vite build: the web gate
+make test_integration # migrations + repository SQL against a real PostgreSQL
+make vuln             # reachable-vulnerability scan (needs network)
 ```
 
-`make check` needs no database, no container and no secret file: it compiles every
-Go module (`api`, `cli`, `gui`, `winres`), it does not run them. That is deliberate — the gate has to work on
-a fresh clone. It fails loudly if the Go toolchain is missing rather than skipping,
-and it lists the packages with no test files, because `go test` prints
-`[no test files]` and still exits 0. **A green `make check` means "the packages
-with tests passed", not coverage** — name the packages when you report a result.
+| Gate | Needs | Proves | Does not prove |
+| --- | --- | --- | --- |
+| `make check` | Go only, with no database or container | formatted, vetted, tested packages pass, everything compiles | SQL, HTTP routes, the browser |
+| `make web_check` | Node (the `mise.toml` pin) | lint, format, types, build | that the page looks right |
+| `make test_integration` | `TEST_DATABASE_URL` → a database named `*_test` | every migration up and down, every repository's SQL | HTTP end to end |
+| `make fyne_race` | cgo + GL headers | the window's suite is race-free | how it looks on a real display |
 
-`make web_check` needs Node (the `mise.toml` pin) and does not run the product.
+> [!IMPORTANT]
+> **A green `make check` means "the packages with tests passed", not coverage.**
+> `go test` prints `[no test files]` and still exits 0, so `make check` lists
+> those packages. Name the packages when you report a result.
 
-Both feature gates run locally: CI runs on release pull requests (`dev` → `main`)
-and on manual dispatch only.
-
-## 🎯 Make targets
-
-| Target | What it does |
-| --- | --- |
-| `make setup` | create `.env` and the database secret from their examples (idempotent) |
-| `make build` | the local binaries into `./build` (and the UI they embed) |
-| `make release` | one-folder archives for every platform into `./build/dist` |
-| `make run_api` | run the API against the configured database |
-| `make run_cli` | run the CLI |
-| `make migrate_up` / `migrate_down` / `migrate_down_all` | apply or roll back migrations |
-| `make up` | build and run the product: UI `:5173`, API `:4000`, db, migrations |
-| `make dev-up` / `dev-down` / `dev-restart` | the source dev loop |
-| `make web_install` / `web_build` / `web_dev` / `web_check` | the web UI |
-| `make screenshots` | capture the README screenshots (needs the app running) |
-
-`make build` builds the web UI first, because the one binary carries a copy of
-it (the window is `make build_gui`). `make check` stays Go-only; the web has its
-own gate.
+> [!NOTE]
+> CI (Go), CI (Web) and CI (Image) run on **release** pull requests (`dev` →
+> `main`) and on manual dispatch. CI (GUI) also runs on pull requests into `dev`
+> that touch Go code. Everything else is gated locally, so run the gates before you
+> push.
 
 ## 🧪 The dev sandbox
 
-The commands above need a Go toolchain on the host. The sandbox removes that
-requirement: a container with Go **1.27.4** — the version in `go.mod`, the same one
-CI uses — with the workspace bind-mounted, so the files you edit are the same
-files. The frontend has the same arrangement in `web-dev`: the Node from
-`mise.toml`, running Vite against the same bind mount.
+The sandbox is a container with Go **1.27.4** (the version in `go.mod`, the same
+one CI uses), with the workspace bind-mounted, so the files you edit are the same
+files. The frontend runs the same way in `web-dev`, using the Node from `mise.toml`.
 
-```sh
-make dev-up     # the loop: UI :5173 (Vite, hot reload) + API :4000
-make dev-shell  # a shell inside the sandbox
-make dev-down   # stop it (keeps the volumes)
+```mermaid
+flowchart LR
+    subgraph host["Your machine"]
+        SRC["📝 Source files"]
+        BR["🌐 Browser :5173"]
+    end
+    subgraph compose["make dev-up"]
+        WD["⚡ web-dev<br/>Vite, hot reload"]
+        DEV["🧪 dev<br/>make run_api :4000"]
+        DB[("🐘 db")]
+        MIG["🔁 migrate"]
+    end
+    SRC -. bind mount .-> WD
+    SRC -. bind mount .-> DEV
+    BR --> WD
+    WD -->|"/v1 proxy"| DEV
+    DEV --> DB
+    MIG --> DB
+
+    classDef h fill:#f3e8ff,stroke:#9333ea,color:#581c87
+    classDef c fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+    classDef d fill:#fef3c7,stroke:#d97706,color:#78350f
+    class SRC,BR h
+    class WD,DEV,MIG c
+    class DB d
 ```
 
-`make dev-up` starts four things: PostgreSQL, the migrations, the sandbox with
-`make run_api` in it, and the Vite dev server. Both HTTP ports answer when it
-returns, and an edit on the host is visible in the other one immediately — the Go
-process recompiles on its next start (there is no file watcher: restart the API
-after a Go change), and Vite reloads the browser on a web change.
+```sh
+make dev-up       # the loop: UI :5173 (hot reload) + API :4000
+make dev-shell    # a shell inside the sandbox
+make dev-restart  # stop and start again (no rebuild)
+make dev-build    # rebuild the images after a Dockerfile edit
+make dev-down     # stop it (keeps the volumes)
+```
 
-`dev-up` does not rebuild an image, so a start is a start. Compose still builds the
-images the first time they are needed. An edit to a `Dockerfile`,
-`web/Dockerfile.dev`, or a script one of them `COPY`s is the one change the loop
-cannot pick up by itself — `make dev-build` rebuilds both images, and
-`make dev-restart` is `dev-down` followed by `dev-up`.
+| You edit | What happens |
+| --- | --- |
+| a `.tsx` / `.ts` file | ⚡ Vite reloads the browser |
+| a `.go` file | 🔁 restart the API: there is no Go file watcher |
+| a `Dockerfile`, `web/Dockerfile.dev` or a script one of them copies | 🏗️ `make dev-build`; `dev-up` refuses a stale image and names it |
 
-A stale image fails loudly after a Go pin bump, so `dev-up` checks it before
-starting anything: `scripts/check-dev-toolchain.sh` compares the toolchain in the
-image with the `go` directive in `go.mod` and refuses an older one with
-`make dev-build` as the repair. The dev entrypoint runs the same check, so the
-no-Make `docker compose up dev web-dev db migrate` path reports it too.
+> [!TIP]
+> After a Go pin bump, `dev-up` checks the image's toolchain against `go.mod`
+> **before** starting (`scripts/check-dev-toolchain.sh`) and names `make
+> dev-build`, instead of letting the API die inside the log stream.
 
-| Role | Where | Port |
-| --- | --- | --- |
-| Frontend (the app) | `web-dev` service, Vite | **5173** |
-| Backend (the API) | `dev` service, `make run_api` | **4000** |
-
-| What you want | Commands | Ports |
-| --- | --- | --- |
-| the product, in containers | `make up` | UI `:5173`, API `:4000` |
-| the dev loop, against the source | `make dev-up` | UI `:5173`, API `:4000` |
-| the same loop with host toolchains | `make run_api` + `make web_dev` | API `:4000`, UI `:5173` |
-
-`Ctrl-C` stops the log stream and leaves the loop running — `make dev-down` stops
-it. The marker file `.dev/sandbox-start` (gitignored) is how the entrypoint knows
-to start the API rather than sleep; `dev-up` creates it and `dev-down` removes it,
-so a bare `docker compose up dev db migrate` is still a quiet sandbox with a shell.
-
-Inside the sandbox the configuration comes from the container, not from `.env`:
-compose sets `DB_HOST=db` and `DB_PORT=5432`, and the Makefile deliberately does
-not import the host's `.env` there. The database password stays a file secret the
-container reads from `/run/secrets/db_password`.
-
-Everything also works without Make:
+<details>
+<summary><b>Without Make, and on Windows</b></summary>
 
 ```sh
 mkdir -p .dev && touch .dev/sandbox-start   # makes the sandbox run the API
 docker compose up dev web-dev db migrate     # the whole loop
-python scripts/dev-up.py dev-up              # native Windows: same thing
+python scripts/dev-up.py dev-up              # native Windows: the same
 ```
 
-| Platform | How to run the dev flow |
+| Platform | Dev flow |
 | --- | --- |
-| Linux, macOS | `make dev-up` |
-| WSL2 | `make dev-up` (the host is Linux) |
-| Windows (native) | `python scripts/dev-up.py dev-up`, or the compose command above |
+| Linux, macOS, WSL2 | `make dev-up` |
+| Windows (native) | `python scripts/dev-up.py dev-up` |
 
-`make claude-auto`, `make codex-auto` or `make opencode-auto` (or the plain
-`claude`, `codex`, `opencode`) runs that AI agent inside the sandbox, on any host
-OS — the agents are installed in the image. It starts the dev loop with it: the
-API on http://localhost:4000 and the UI on http://localhost:5173, the same pair
-`make dev-up` serves (`AGENT_LOOP=0` starts the sandbox alone). A sandbox that is
-already running is left alone, so an agent session in it survives; if it was
-started without the API, the target says so — `make dev-restart` starts it. Each asks for its login once and keeps
-it in a Docker volume, so restarts and `make dev-build` keep you signed in;
-`make claude-upgrade` (or `agents-upgrade`) moves an agent to its latest release
-and `make doctor` checks everything at once. Only `~/.config/gh` and
-`~/.gitconfig` are mounted from the host, read-only. The container has no Docker
-socket — the agent inside it cannot manage containers, on purpose.
+`Ctrl-C` leaves the loop running, and `make dev-down` stops it. The marker
+`.dev/sandbox-start` (gitignored) tells the entrypoint to start the API rather than
+sleep. Inside the sandbox, Compose sets `DB_HOST=db` and `DB_PORT=5432`, and the
+host's `.env` is not imported.
+
+</details>
+
+### 🤖 AI agents in the sandbox
+
+`make claude`, `make codex` and `make opencode` (and their `-auto` variants) run
+that agent inside the sandbox on any host OS, and start the dev loop beside it
+(`AGENT_LOOP=0` starts the sandbox alone).
+
+| | |
+| --- | --- |
+| 🔑 Logins | asked for once, kept in a Docker volume, so restarts and rebuilds keep you signed in |
+| ⬆️ Upgrades | `make claude-upgrade` (or `agents-upgrade`) moves to the latest release |
+| 🩺 Health | `make doctor` checks Docker, the image, the GitHub token and every login |
+| 🔒 Boundary | no Docker socket inside: the agent cannot manage containers, on purpose |
 
 ## 🖥️ The desktop app
 
-The window is Fyne, and Fyne needs cgo. That is why it is not in `make check`:
+The window is [Fyne](https://fyne.io), and Fyne needs cgo, which is why it is not in
+`make check`. Every Fyne file carries `//go:build fyne`, so a machine without GL can
+still pass the gate.
 
 | Target | What it does |
 | --- | --- |
 | `make build_gui` | builds `build/gui/eznit-gui` for the host (cgo + GL/X11 headers) |
-| `make gui_check` | `go vet -tags fyne ./...` and `go test -tags fyne ./...` |
-| `make fyne_race` | the window's suite under `-race` (cgo, about 2 minutes) |
+| `make gui_check` | `go vet` and `go test` with `-tags fyne` |
+| `make fyne_race` | the window's suite under `-race` (about 2 minutes) |
 
-`make fyne_race` exists because the window's tests are the one place a data race
-can hide: Fyne's **test driver runs `fyne.Do` inline on the calling goroutine**,
-so a worker's widget work overlaps the test that started it. The window counts
-its background work and the tests wait for it (see `internal/fyneui/work.go`), and
-the `-race` run is what keeps that honest — it went from 319 reports to zero, and
-CI (GUI) runs the same command.
+Debian/Ubuntu headers: `libgl1-mesa-dev xorg-dev libwayland-dev libxkbcommon-dev
+wayland-protocols`. macOS: the Xcode command line tools.
 
-On Debian/Ubuntu the headers are `libgl1-mesa-dev xorg-dev libwayland-dev
-libxkbcommon-dev wayland-protocols`; macOS needs the Xcode command line tools.
-Every Fyne file carries `//go:build fyne`, so `go build ./...` and `make check`
-stay cgo-free and a machine without GL can still pass the gate.
+> [!NOTE]
+> **Why `fyne_race` exists:** Fyne's test driver runs `fyne.Do` *inline on the
+> calling goroutine*, so a worker's widget work overlaps the test that started it.
+> The window counts its background work and the tests wait for it
+> (`internal/fyneui/work.go`). The `-race` run took that from 319 reports to zero,
+> and CI (GUI) runs the same command.
 
 The window is an HTTP client (`internal/fyneui`) plus a supervisor for a local
-server (`internal/serverctl`). The supervisor is **plain Go** — no build tag —
-so `make check` covers the parts that matter: what a start checks, what a stop
-means, and what a save preserves. `internal/fyneui`'s tests use Fyne's software
-driver (`go test -tags fyne`).
+server (`internal/serverctl`). The supervisor is **plain Go**, so `make check`
+covers what a start checks, what a stop means and what a save preserves. File and
+folder choices go through a `picker` seam: the system dialog (zenity) in the app,
+and Fyne's dialog in the tests.
 
-The window ships in the one archive per platform: the packer adds it from the
-matrix build, and the verify group requires `-gui -gui-name eznit-gui`.
-
-**CI (GUI)** runs the same vet/test/build on pull requests (the workflow is
-`.github/workflows/ci.gui.yml`). It is the only place the GUI is compiled in
-this repository's automation; the release matrix builds the six window
-binaries — one per platform — and packs each into both archives.
-
-It also **opens the window**: the built binary runs on a virtual X server
-(`xvfb` with software GL) and has to still be alive ten seconds later. Every
-other check stops before the toolkit starts — the unit tests use Fyne's software
-driver, and `-version`/`--help` exit first — so a driver that cannot initialise
-or a panic in a tab constructor would otherwise ship. A virtual display with
-software rendering is not a desktop: this proves startup, not looks.
+**CI (GUI)** vets, tests and builds the window, then **opens it** on a virtual X
+server (`xvfb` with software GL) and checks it is still alive ten seconds later.
+That proves startup, not looks.
 
 ## 🧱 Migrations
 
-`db/migrations/` is append-only history: a numbered `.up.sql`/`.down.sql` pair per
-change, applied by `golang-migrate`. **Never edit a migration that has run
-somewhere** — add the next pair instead. Constraints belong in the schema where
-they can be expressed (`UNIQUE`, `FOREIGN KEY`), not only in Go, because a
-constraint in Postgres cannot be forgotten by a new code path.
+`db/migrations/` is **append-only history**: one numbered `.up.sql` / `.down.sql`
+pair per change, applied by `golang-migrate`.
 
 ```sh
 make migrate_up
@@ -179,32 +169,56 @@ make migrate_down      # one step
 make migrate_down_all
 ```
 
-The migration targets read `DB_USER`, `DB_HOST` and `DB_NAME` from `.env` or
-`.env.local`; if they are missing, they say so instead of failing with an empty
-connection string.
+> [!CAUTION]
+> **Never edit a migration that has run somewhere.** Add the next pair instead.
 
-## 🔍 Checking your change
-
-1. `make check` — the gate above, and `make web_check` for the UI.
-2. If you touched the API, run the stack and exercise the route: the gate
-   compiles, it does not call anything.
-3. If the change is user-visible in the CLI, read the output — a CLI has no
-   screenshot, and its output is the artifact.
+Constraints belong in the schema where they can be expressed (`UNIQUE`,
+`FOREIGN KEY`), not only in Go, because a constraint in Postgres cannot be forgotten
+by a new code path.
 
 ## 🧭 Where a change belongs
 
+```text
+cmd/               the entrypoints: cli, gui
+internal/server/   eznit serve: logger, database, router, graceful shutdown
+internal/domain/   one package per resource (users, sessions, files, templates, commands)
+                   handler → service → repository, plus dto.go
+internal/platform/ middleware (session guard), sql, webui (SPA), openapi
+internal/cli/      the CLI commands
+internal/fyneui/   the desktop window
+internal/serverctl/ the window's local-server supervisor
+pkg/               logger, errors, http/json helpers, path helpers, types
+db/migrations/     golang-migrate SQL
+web/               React + TypeScript UI, embedded into the binaries
+```
+
+| Layer | Does | Never |
+| --- | --- | --- |
+| **handler** | decodes the request, writes the response | queries the database |
+| **service** | holds the rules | speaks HTTP |
+| **repository** | is the only place that speaks SQL | returns an HTTP status |
+
 [ARCHITECTURE.md](https://github.com/fiwon123/eznit/blob/dev/ARCHITECTURE.md) has
-the full map. The short version:
+the full map.
 
-```
-cmd/             the entrypoints: api, cli, gui
-internal/domain/ one package per resource: users, sessions, files, templates
-                 handler -> service -> repository, plus dto.go
-internal/platform/ middleware (session guard), sql (connection), webui (SPA), openapi
-pkg/             logger, errors, http/json helpers, path helpers, types
-db/migrations/   golang-migrate SQL, one up/down pair per change
-web/             React + TypeScript UI; embeds into the api/gui binaries
-```
+## 🎯 Make targets
 
-The layering is strict: a handler decodes and writes, a service holds the rules, a
-repository is the only place that speaks SQL.
+| Target | What it does |
+| --- | --- |
+| `make setup` | create `.env` and the database secret from their examples |
+| `make build` | the local binaries into `./build` (and the UI they embed) |
+| `make release` | one-folder archives for every platform into `./build/dist` |
+| `make run_api` / `make run_cli` | run the API / the CLI |
+| `make up` | the product: UI :5173, API :4000, db, migrations |
+| `make backup` / `make restore BACKUP=…` | back up / restore a Compose deployment |
+| `make web_install` / `web_build` / `web_dev` / `web_check` | the web UI |
+| `make wiki_push` | publish `docs/wiki/` to this wiki |
+| `make screenshots` | capture the README screenshots (needs the app running) |
+
+## 👉 Next
+
+| | |
+| --- | --- |
+| 📦 [Releases](https://github.com/fiwon123/eznit/wiki/Releases) | how a release is cut and verified |
+| 🤝 [Contributing](https://github.com/fiwon123/eznit/blob/dev/CONTRIBUTING.md) | issues, branches, pull requests |
+| 🧯 [Troubleshooting](https://github.com/fiwon123/eznit/wiki/Troubleshooting#-stack-and-sandbox) | sandbox and port problems |
