@@ -1344,17 +1344,21 @@ func (v *serverView) chooseFolder() {
 		return
 	}
 
-	dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
-		if err != nil {
-			v.setNote(err.Error())
-			return
-		}
-		if uri == nil {
-			return
-		}
+	use := func(path string) { v.useChosenDir(path) }
 
-		v.useChosenDir(uri.Path())
-	}, v.ui.window)
+	v.ui.pick(func(p picker) (string, error) { return p.openFolder("Choose the server folder") }, use, func() {
+		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
+			if err != nil {
+				v.setNote(err.Error())
+				return
+			}
+			if uri == nil {
+				return
+			}
+
+			use(uri.Path())
+		}, v.ui.window)
+	})
 }
 
 // loadConfig fills the form and the secret state from the folder. It never

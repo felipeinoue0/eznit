@@ -312,36 +312,43 @@ func (v *accountView) uploadFile() {
 		return
 	}
 
-	dialog.ShowFileOpen(func(reader fyne.URIReadCloser, err error) {
-		if err != nil {
-			v.setStatus("The file could not be chosen: "+err.Error(), statusError)
-			return
-		}
-		if reader == nil {
-			return
-		}
+	v.ui.pick(func(p picker) (string, error) { return p.openFile("Upload a file") }, v.uploadPath, func() {
+		dialog.ShowFileOpen(func(reader fyne.URIReadCloser, err error) {
+			if err != nil {
+				v.setStatus("The file could not be chosen: "+err.Error(), statusError)
+				return
+			}
+			if reader == nil {
+				return
+			}
 
-		path := reader.URI().Path()
-		reader.Close()
+			path := reader.URI().Path()
+			reader.Close()
 
-		v.setStatus("Uploading "+path+"…", statusPending)
+			v.uploadPath(path)
+		}, v.ui.window)
+	})
+}
 
-		client := v.ui.client
+// uploadPath uploads the file the person chose, from either dialog.
+func (v *accountView) uploadPath(path string) {
+	v.setStatus("Uploading "+path+"…", statusPending)
 
-		v.ui.background(func() {
-			err := client.UploadFile(path)
+	client := v.ui.client
 
-			fyne.Do(func() {
-				if err != nil {
-					v.setStatus("The upload failed: "+messageOf(err), statusError)
-					return
-				}
+	v.ui.background(func() {
+		err := client.UploadFile(path)
 
-				v.afterLoad = "Uploaded " + path + "."
-				v.reload()
-			})
+		fyne.Do(func() {
+			if err != nil {
+				v.setStatus("The upload failed: "+messageOf(err), statusError)
+				return
+			}
+
+			v.afterLoad = "Uploaded " + path + "."
+			v.reload()
 		})
-	}, v.ui.window)
+	})
 }
 
 func (v *accountView) deleteFile(file apiclient.File) {

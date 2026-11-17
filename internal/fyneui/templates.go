@@ -449,17 +449,7 @@ func (v *templatePage) applySelected() {
 		return
 	}
 
-	dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
-		if err != nil {
-			v.report("The folder could not be chosen: "+err.Error(), statusError)
-			return
-		}
-		if uri == nil {
-			return
-		}
-
-		target := uri.Path()
-
+	use := func(target string) {
 		existing, err := templateapply.Existing(target, files)
 		if err != nil {
 			v.report("This template cannot be written into that folder: "+err.Error(), statusError)
@@ -483,7 +473,21 @@ func (v *templatePage) applySelected() {
 					v.askForValues(detail, files, target)
 				}
 			}, v.ui.window)
-	}, v.ui.window)
+	}
+
+	v.ui.pick(func(p picker) (string, error) { return p.openFolder("Choose where to apply the template") }, use, func() {
+		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
+			if err != nil {
+				v.report("The folder could not be chosen: "+err.Error(), statusError)
+				return
+			}
+			if uri == nil {
+				return
+			}
+
+			use(uri.Path())
+		}, v.ui.window)
+	})
 }
 
 // askForValues collects the answers a template needs: its declared variables

@@ -41,6 +41,11 @@ type ui struct {
 	// can supply one: the software driver's clipboard is nil.
 	clip fyne.Clipboard
 
+	// picker opens the operating system's file and folder dialogs; nil (the
+	// tests) uses Fyne's. picking is set while one is open (#392).
+	picker  picker
+	picking bool
+
 	// address is the instance the window talks to, and where that address
 	// came from — shown in each tab's header rather than picked silently.
 	address apiChoice
@@ -107,6 +112,7 @@ func Run(version string, apiURL string, serverDir string) error {
 		local:   localMode(apiURL),
 		address: apiFrom(apiURL),
 		updater: newAppUpdater(version),
+		picker:  systemPicker{},
 	}
 
 	// The default mode is this machine, and its address is the local server's
