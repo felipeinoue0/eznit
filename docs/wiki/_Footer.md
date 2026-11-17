@@ -1,0 +1,3 @@
+🏠 [Home](https://github.com/fiwon123/eznit/wiki) · 🚀 [Getting Started](https://github.com/fiwon123/eznit/wiki/Getting-Started) · 🧯 [Troubleshooting](https://github.com/fiwon123/eznit/wiki/Troubleshooting) · 📦 [Downloads](https://github.com/fiwon123/eznit/releases/latest) · 🐛 [Report an issue](https://github.com/fiwon123/eznit/issues/new)
+
+<sub>This wiki is generated from <a href="https://github.com/fiwon123/eznit/tree/dev/docs/wiki"><code>docs/wiki/</code></a> in the repository — edit it there, through a pull request. A change made only here is overwritten by the next <code>make wiki_push</code>.</sub>
