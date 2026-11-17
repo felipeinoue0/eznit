@@ -110,13 +110,13 @@ func TestUseServerKeepsTheTokenOnOneHostOnly(t *testing.T) {
 	}
 }
 
-// "This machine" means the server the Server tab would run, on the port that
+// "This machine" means the server the Local server tab would run, on the port that
 // folder's configuration names.
 func TestLocalAddressFollowsTheServerTabsPort(t *testing.T) {
 	view := newTestServerView(t, bundleDir(t, "API_PORT=\"4321\"\n"))
 
 	if got := view.ui.localAddress(); got != "http://127.0.0.1:4321" {
-		t.Errorf("localAddress = %q, want the Server tab's port", got)
+		t.Errorf("localAddress = %q, want the Local server tab's port", got)
 	}
 }
 
@@ -139,16 +139,12 @@ func newTestUI(t *testing.T) *ui {
 		updater: &appUpdater{version: "test", updater: update.New(update.MemberGUI)},
 	}
 	u.client = apiclient.New(u.address.url)
-	u.files = newFilesView(u)
-	u.templates = newTemplatesView(u)
-	u.shared = newSharedView(u)
+	u.web = newWebView(u)
+	u.account = newAccountView(u)
 
-	u.tabs = container.NewAppTabs(
-		container.NewTabItem("Files", u.files.content()),
-		container.NewTabItem("Templates", u.templates.content()),
-		container.NewTabItem("Shared", u.shared.content()),
-		container.NewTabItem("About", u.aboutContent()),
-	)
+	// The window's own tabs, without the Local server one: these tests do not
+	// start a server.
+	u.buildTabs()
 	u.window.SetContent(u.tabs)
 
 	// Settle before the app quits. A request still in flight would otherwise
@@ -175,7 +171,7 @@ func tabNamed(t *testing.T, u *ui, title string) *container.TabItem {
 }
 
 // A connect is not a login: connecting from another tab with no session leaves
-// the Files tab asking for one, rather than showing a library it cannot fill
+// My Account asking for one, rather than showing a library it cannot fill
 // (#336).
 func TestConnectWithoutASessionShowsLogin(t *testing.T) {
 	u := newTestUI(t)
@@ -189,8 +185,8 @@ func TestConnectWithoutASessionShowsLogin(t *testing.T) {
 		t.Error("a connect without a session did not report a sign-out")
 	}
 
-	if findButton(u.tabs.Items[0].Content, "Log in") == nil {
-		t.Error("the Files tab shows no login card after a connect without a session")
+	if findButton(u.accountTab.Content, "Log in") == nil {
+		t.Error("My Account shows no login card after a connect without a session")
 	}
 }
 
@@ -223,10 +219,10 @@ func TestForgetSessionLeavesACapturedClientAlone(t *testing.T) {
 	}
 }
 
-// A session belongs to the Files tab: that is the tab the login form replaces,
+// A session belongs to My Account: that is the tab the login form replaces,
 // so that is where signing out belongs. It forgets the token and the catalogue,
 // and keeps the address and the host tokens.
-func TestSignOutLivesOnTheFilesTab(t *testing.T) {
+func TestSignOutLivesOnMyAccount(t *testing.T) {
 	u := newTestUI(t)
 
 	if err := config.Set("token", "the-token"); err != nil {
@@ -237,13 +233,16 @@ func TestSignOutLivesOnTheFilesTab(t *testing.T) {
 	}
 
 	u.client.Token = "the-token"
-	u.templates.items = []templates.TemplateData{{Name: "a private starter"}}
-	u.templates.loaded = true
-	library := u.files.built
+	u.account.templates = []templates.TemplateData{{Name: "a private starter"}}
+	u.account.ready = true
+	library := u.account.built
 
-	signOut := findButton(u.tabs.Items[0].Content, "Sign out")
+	// Sign out is pressed on My Account, so that is the tab on show.
+	u.tabs.Select(u.accountTab)
+
+	signOut := findButton(u.accountTab.Content, "Sign out")
 	if signOut == nil {
-		t.Fatal("the Files tab has no Sign out button")
+		t.Fatal("My Account has no Sign out button")
 	}
 
 	test.Tap(signOut)
@@ -261,12 +260,12 @@ func TestSignOutLivesOnTheFilesTab(t *testing.T) {
 		t.Errorf("client token = %q, want it cleared", u.client.Token)
 	}
 
-	if u.templates.loaded || u.templates.items != nil {
-		t.Error("the catalogue is still loaded after signing out")
+	if u.account.ready || u.account.templates != nil {
+		t.Error("the account's templates are still loaded after signing out")
 	}
 
-	if u.tabs.Items[0].Content == library {
-		t.Error("the Files tab still shows the library")
+	if u.accountTab.Content == library {
+		t.Error("My Account still shows the library")
 	}
 
 	if findButton(u.aboutContent(), "Sign out") != nil {

@@ -39,22 +39,26 @@ type ui struct {
 	// can supply one: the software driver's clipboard is nil.
 	clip fyne.Clipboard
 
-	// address is the instance the Files tab talks to, and where that address
-	// came from — shown in the tab's header rather than picked silently.
+	// address is the instance the window talks to, and where that address
+	// came from — shown in each tab's header rather than picked silently.
 	address apiChoice
 
 	// local is the "Use this machine" choice. While it is on, the address bars
-	// fill themselves from the Server tab's folder; the choice is remembered.
+	// fill themselves from the Local server tab's folder; the choice is remembered.
 	local bool
 
-	client    *apiclient.Client
-	files     *filesView
-	templates *templatesView
-	shared    *sharedView
-	server    *serverView
-	updater   *appUpdater
+	client  *apiclient.Client
+	web     *webView
+	account *accountView
+	server  *serverView
+	updater *appUpdater
 
 	tabs *container.AppTabs
+
+	// webTab and accountTab are kept by identity, not position: the account
+	// tab's content is swapped between the login card and the account.
+	webTab     *container.TabItem
+	accountTab *container.TabItem
 
 	// work counts the background requests the tabs have running, so a test can
 	// wait for the window to be idle instead of polling it while it is busy
@@ -87,7 +91,7 @@ func Run(version string, apiURL string, serverDir string) error {
 		updater: newAppUpdater(version),
 	}
 
-	// The default mode is this machine, and its address is the Server tab's
+	// The default mode is this machine, and its address is the Local server tab's
 	// folder. That folder is not known until the view exists, so the default
 	// stand-in is replaced below.
 	if u.local {
@@ -95,9 +99,8 @@ func Run(version string, apiURL string, serverDir string) error {
 	}
 
 	u.client = apiclient.New(u.address.url)
-	u.files = newFilesView(u)
-	u.templates = newTemplatesView(u)
-	u.shared = newSharedView(u)
+	u.web = newWebView(u)
+	u.account = newAccountView(u)
 	u.server = newServerView(u, serverFrom(serverDir))
 
 	if u.local {
@@ -105,31 +108,11 @@ func Run(version string, apiURL string, serverDir string) error {
 		u.client = apiclient.New(u.address.url)
 	}
 
-	// The tabs exist before a session does. The Server tab has to be usable on
-	// a machine whose server has never run — running it and pointing it at a
-	// database is how a first install gets something to log in to.
-	templatesTab := container.NewTabItemWithIcon("Templates", theme.DocumentIcon(), u.templates.content())
-	sharedTab := container.NewTabItemWithIcon("Shared", theme.MailForwardIcon(), u.shared.content())
-
-	u.tabs = container.NewAppTabs(
-		container.NewTabItemWithIcon("Files", theme.FolderIcon(), u.files.content()),
-		templatesTab,
-		sharedTab,
-		container.NewTabItemWithIcon("Server", theme.ComputerIcon(), u.server.content()),
-		container.NewTabItemWithIcon("About", theme.InfoIcon(), u.aboutContent()),
-	)
-
-	// The catalogue is fetched when the tab is first opened, not at startup: a
-	// window whose server is still being set up on another tab should not open
-	// with a red message about it.
-	u.tabs.OnSelected = func(item *container.TabItem) {
-		switch item {
-		case templatesTab:
-			u.templates.ensureLoaded()
-		case sharedTab:
-			u.shared.ensureLoaded()
-		}
-	}
+	// The tabs exist before a session does. Web needs none, and the Local
+	// server tab has to be usable on a machine whose server has never run —
+	// running it and pointing it at a database is how a first install gets
+	// something to log in to.
+	u.buildTabs()
 
 	window.SetContent(u.tabs)
 
@@ -165,11 +148,37 @@ func Run(version string, apiURL string, serverDir string) error {
 		u.showMain()
 	}
 
+	// Web is the first tab, so it loads now rather than on a tab change.
+	u.web.ensureLoaded()
+
 	go u.server.pollHealth()
 
 	window.ShowAndRun()
 
 	return nil
+}
+
+// buildTabs lays out the four tabs (#373): Web — what is public, first —
+// then My Account, Local server and About.
+func (u *ui) buildTabs() {
+	u.webTab = container.NewTabItemWithIcon("Web", theme.GridIcon(), u.web.content())
+	u.accountTab = container.NewTabItemWithIcon("My Account", theme.AccountIcon(), u.account.content())
+
+	items := []*container.TabItem{u.webTab, u.accountTab}
+	if u.server != nil {
+		items = append(items, container.NewTabItemWithIcon("Local server", theme.ComputerIcon(), u.server.content()))
+	}
+	items = append(items, container.NewTabItemWithIcon("About", theme.InfoIcon(), u.aboutContent()))
+
+	u.tabs = container.NewAppTabs(items...)
+
+	// The Web list is per server and per session; it reloads when it is shown
+	// after either changed.
+	u.tabs.OnSelected = func(item *container.TabItem) {
+		if item == u.webTab {
+			u.web.ensureLoaded()
+		}
+	}
 }
 
 // serverFrom decides the server folder: the flag, then the stored setting,
@@ -205,7 +214,7 @@ func defaultServerDir() string {
 // apiFrom decides the API base: the flag, then GUI_API_URL, then the saved
 // address, then the local stack. The environment beats the saved address so
 // the documented GUI_API_URL keeps working after a login has stored one; the
-// Files tab's header names whichever source won, so it is never silent.
+// tabs' headers name whichever source won, so it is never silent.
 func apiFrom(flagValue string) apiChoice {
 	if value := strings.TrimSpace(flagValue); value != "" {
 		return apiChoice{url: apiclient.NormalizeBaseURL(value), source: "the -api flag"}
@@ -222,7 +231,7 @@ func apiFrom(flagValue string) apiChoice {
 	return apiChoice{url: apiclient.NormalizeBaseURL(""), source: "the default"}
 }
 
-// localAddress is the API that a server started from the Server tab's folder
+// localAddress is the API that a server started from the Local server tab's folder
 // answers on. The port comes from that folder's configuration, so the two tabs
 // cannot disagree about where "this machine" is.
 func (u *ui) localAddress() string {
@@ -252,7 +261,7 @@ func (u *ui) connect(choice apiChoice) (bool, error) {
 
 	u.syncAddressBars()
 
-	// A connect is not a login. Connecting from the Templates tab with no
+	// A connect is not a login. Connecting from the Web tab with no
 	// session used to put the empty library in front of a window that had
 	// nothing to fill it with, and the tab only said so after a request failed
 	// (#336). The message names the address, because the card's own field is
@@ -271,12 +280,12 @@ func (u *ui) connect(choice apiChoice) (bool, error) {
 // syncAddressBars keeps every bar on the current mode and address. A tab
 // rebuilds its bar with its content, so this reads the two views' current ones.
 func (u *ui) syncAddressBars() {
-	if u.files != nil && u.files.bar != nil {
-		u.files.bar.sync()
+	if u.account != nil && u.account.bar != nil {
+		u.account.bar.sync()
 	}
 
-	if u.templates != nil && u.templates.bar != nil {
-		u.templates.bar.sync()
+	if u.web != nil && u.web.bar != nil {
+		u.web.bar.sync()
 	}
 }
 
@@ -293,16 +302,18 @@ func (u *ui) setAPI(address apiChoice) {
 		u.client = u.client.WithToken(token)
 	}
 
-	// The catalogue is per instance: a new address is a new catalogue.
-	if u.templates != nil {
-		u.templates.forget()
+	// The lists are per instance: a new address is a new list. The Web bar's
+	// own connect reloads it; a connect from elsewhere leaves it to the next
+	// visit.
+	if u.web != nil {
+		u.web.forget()
 	}
-	if u.shared != nil {
-		u.shared.forget()
+	if u.account != nil {
+		u.account.forget()
 	}
 }
 
-// useServer points the Files tab at another instance and remembers the choice.
+// useServer points the window at another instance and remembers the choice.
 // A different host is a different instance, and the token was issued by the old
 // one, so it is forgotten; it reports whether the session had to go.
 func (u *ui) useServer(address apiChoice) (bool, error) {
@@ -329,18 +340,21 @@ func (u *ui) useServer(address apiChoice) (bool, error) {
 	return true, nil
 }
 
-// showMain swaps the Files tab to the signed-in library.
+// showMain swaps My Account to the signed-in account.
 func (u *ui) showMain() {
-	// A session names the owners on the Shared tab; reload it when opened.
-	if u.shared != nil {
-		u.shared.forget()
+	// A session names the owners on the Web tab: drop the list, and it loads
+	// again when the tab is next shown. It is not reloaded from here — the
+	// account's own listing is already running, and two workers touching
+	// widgets at once is what #333 removed.
+	if u.web != nil {
+		u.web.forget()
 	}
 
-	u.setFilesTab(u.files.content())
-	u.files.refresh()
+	u.setAccountTab(u.account.content())
+	u.account.reload()
 }
 
-// showLogin puts the sign-in form in the Files tab. The window keeps its other
+// showLogin puts the sign-in form on My Account. The window keeps its other
 // tabs: a signed-out user can still run a local server from here.
 func (u *ui) showLogin(message string) {
 	u.showLoginWith(message, statusIdle)
@@ -350,24 +364,24 @@ func (u *ui) showLogin(message string) {
 // could not be forgotten is an error, and the card should not say it in the
 // same grey as "you are signed out".
 func (u *ui) showLoginWith(message string, kind statusKind) {
-	u.setFilesTab(newLoginView(u, message, kind).content())
+	u.setAccountTab(newLoginView(u, message, kind).content())
 }
 
-// showUnreachable puts the Files tab's "cannot reach" panel in place. The
+// showUnreachable puts My Account's "cannot reach" panel in place. The
 // session is kept: a server that is not there has said nothing about the token.
 func (u *ui) showUnreachable(address string, cause error) {
-	content := u.files.unreachableContent(address, cause)
-	u.setFilesTab(content)
+	content := u.account.unreachableContent(address, cause)
+	u.setAccountTab(content)
 
 	// The panel's card is measured before it has a width, and a sentence that
 	// wraps is taller than one line: lay it out again now that it has one.
 	relayout(content)
 }
 
-// setFilesTab replaces the first tab's content. The tab itself stays, so the
-// Server tab keeps its log and its status across a sign-in or a sign-out.
-func (u *ui) setFilesTab(content fyne.CanvasObject) {
-	u.tabs.Items[0].Content = content
+// setAccountTab replaces My Account's content. The tab itself stays, so the
+// Local server tab keeps its log and its status across a sign-in or a sign-out.
+func (u *ui) setAccountTab(content fyne.CanvasObject) {
+	u.accountTab.Content = content
 	u.tabs.Refresh()
 }
 
@@ -395,16 +409,12 @@ func (u *ui) forgetSession(message string) {
 	// (#342).
 	u.client = u.client.WithToken("")
 
-	if u.files != nil {
-		u.files.forget()
+	if u.account != nil {
+		u.account.forget()
 	}
 
-	if u.templates != nil {
-		u.templates.forget()
-	}
-
-	if u.shared != nil {
-		u.shared.forget()
+	if u.web != nil {
+		u.web.forget()
 	}
 
 	u.showLogin(message)

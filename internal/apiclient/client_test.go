@@ -102,7 +102,7 @@ func TestSameHost(t *testing.T) {
 	}
 }
 
-// Health is what the Files tab's Test button calls: it must not need a
+// Health is what the address bar's Test button calls: it must not need a
 // session, and it must report a server that answers wrongly.
 func TestHealth(t *testing.T) {
 	t.Run("answering", func(t *testing.T) {

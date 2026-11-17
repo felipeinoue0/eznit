@@ -46,25 +46,25 @@ func TestLocalModeDefaultsToThisMachine(t *testing.T) {
 	}
 }
 
-// The Templates tab has the same bar as Files, without a session to end, and a
-// connect from it reloads the catalogue from the new server.
-func TestTemplatesHasTheSameAddressBar(t *testing.T) {
+// The Web tab has the same bar as My Account, without a session to end, and a
+// connect from it reloads the list from the new server.
+func TestWebHasTheSameAddressBar(t *testing.T) {
 	u := newTestUI(t)
 
-	if u.templates.bar == nil {
-		t.Fatal("the Templates tab has no address bar")
+	if u.web.bar == nil {
+		t.Fatal("the Web tab has no address bar")
 	}
 
-	if u.templates.bar.signOut != nil {
-		t.Error("the Templates bar offers Sign out")
+	if u.web.bar.signOut != nil {
+		t.Error("the Web bar offers Sign out")
 	}
 
-	if u.templates.bar.afterConnect == nil {
-		t.Error("a connect from Templates would not reload the catalogue")
+	if u.web.bar.afterConnect == nil {
+		t.Error("a connect from Web would not reload its list")
 	}
 
-	if got := u.templates.bar.entry.Text; got != u.address.url {
-		t.Errorf("Templates address = %q, want the connected one %q", got, u.address.url)
+	if got := u.web.bar.entry.Text; got != u.address.url {
+		t.Errorf("Web address = %q, want the connected one %q", got, u.address.url)
 	}
 }
 
@@ -75,21 +75,21 @@ func TestLocalBarShowsThisMachine(t *testing.T) {
 
 	u.local = true
 	u.address = apiChoice{url: u.localAddress(), source: localSource}
-	u.files.bar.sync()
+	u.account.bar.sync()
 
-	if !u.files.bar.local.Checked {
+	if !u.account.bar.local.Checked {
 		t.Error("the checkbox is not checked for the local mode")
 	}
 
-	if !u.files.bar.entry.Disabled() {
+	if !u.account.bar.entry.Disabled() {
 		t.Error("the address field is open while the bar is local")
 	}
 
-	if got := u.files.bar.entry.Text; got != u.localAddress() {
+	if got := u.account.bar.entry.Text; got != u.localAddress() {
 		t.Errorf("address = %q, want %q", got, u.localAddress())
 	}
 
-	if got := u.files.bar.source.Text; !strings.Contains(got, localSource) {
+	if got := u.account.bar.source.Text; !strings.Contains(got, localSource) {
 		t.Errorf("source = %q, want %q", got, localSource)
 	}
 }
@@ -106,8 +106,8 @@ func TestAddressFieldShowsAWholeAddress(t *testing.T) {
 		index int
 		bar   func(*ui) *addressBar
 	}{
-		{"files", 0, func(u *ui) *addressBar { return u.files.bar }},
-		{"templates", 1, func(u *ui) *addressBar { return u.templates.bar }},
+		{"web", 0, func(u *ui) *addressBar { return u.web.bar }},
+		{"account", 1, func(u *ui) *addressBar { return u.account.bar }},
 	}
 
 	for _, tab := range tabs {

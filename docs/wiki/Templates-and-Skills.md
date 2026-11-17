@@ -40,29 +40,29 @@ refused. A file marked executable is written with mode `0755` when applied.
 
 ## 🤔 A shared file is not a template
 
-The Files tab and the Templates tab keep different things, and sharing does not
-move a file between them:
+A shared file and a template are different things, and sharing does not turn a
+file into a template:
 
 | | Sharing a file | Publishing a template |
 | --- | --- | --- |
 | Covers | one file | a whole folder |
-| How | **Share** on the Files tab, or `eznit share` | **Publish folder…** on the Templates tab, **New template** on the web page, or `eznit template publish ./folder` |
+| How | **Share** on the file's page in My Account, or `eznit share` | **Publish template…** on My Account, **New template** on the web page, or `eznit template publish ./folder` |
 | Does | makes that one file downloadable by anyone on the instance | adds the folder to the catalogue with a name, a kind and its `{{variables}}` |
-| In the catalogue | no — on the **Shared** tab (and the web page's Explore), visible without an account | yes |
+| In the catalogue | no — listed as a file on the **Web** tab (and the web page's Explore), visible without an account | yes |
 
-So a shared file never appears in the Templates tab, and no kind filter can
-make it appear: the filter lists **template kinds** (`opencode`, `codex`,
+So a shared file is never listed as a template — the window's Templates / Files
+filter keeps them apart — and no kind filter can make it one: the filter lists **template kinds** (`opencode`, `codex`,
 `copilot`, `cursor`, `windsurf`, `generic`, `bash`, `zsh`, `fish`,
 `powershell`), and **All kinds** means "no filter". It is not a list of your
 files.
 
-To publish one from the window, press **Publish folder…** on the Templates tab,
+To publish one from the window, press **Publish template…** on My Account,
 pick the folder, and fill in the form: name (the folder's by default), kind,
 description, Public, and a default for each `{{PLACEHOLDER}}` the files use (an
 empty default makes it a question asked on every apply). It uses the same
 folder walk as the CLI, so `.git`, `node_modules` and the like are left out,
-and a file that is too big is named. Without a session the button says to sign
-in on the Files tab.
+and a file that is too big is named. The button is on My Account, so it needs a
+session.
 
 From a terminal, point the command at the folder and answer its prompts:
 
@@ -72,8 +72,8 @@ eznit login
 eznit template publish ./demo --public
 ```
 
-Then press **Refresh** on the window's Templates tab. The window browses, shows,
-exports, applies and publishes templates.
+Then press **Refresh** on the window's Web tab (or My Account, for a private
+one). The window browses, shows, exports, applies and publishes templates.
 
 ## 📤 Publish, list, show, apply
 

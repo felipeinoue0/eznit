@@ -5,217 +5,115 @@ package fyneui
 import (
 	"fmt"
 	"io"
-	"net/http"
 	"path/filepath"
 	"strings"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
 	"fyne.io/fyne/v2/layout"
-	"fyne.io/fyne/v2/storage"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
-	"github.com/fiwon123/eznit/internal/apiclient"
 	"github.com/fiwon123/eznit/internal/domain/templates"
 	"github.com/fiwon123/eznit/internal/templateapply"
 )
-
-// allKinds is the filter's "no filter" entry. A Select cannot hold an empty
-// label, so the empty kind lives behind this name.
-const allKinds = "All kinds"
 
 // bundleExtension is what a template is written to: the file
 // `eznit template apply --from-file` reads.
 const bundleExtension = ".eznit"
 
-// templatesView is the catalogue: every public template plus the caller's own,
-// one template's contents, and the offline bundle to take away.
-//
-// It reads only. Applying a template into a folder writes files, which is the
-// other half of the feature and a change of its own.
-type templatesView struct {
-	ui *ui
+// templatePage is one opened template, on the Web tab or on My Account: its
+// summary, its files, variables and commands in three tabs, and the two
+// actions that take it away — Save as bundle and Apply.
+type templatePage struct {
+	ui     *ui
+	report func(text string, kind statusKind)
 
-	items    []templates.TemplateData
-	selected int
-	detail   *templates.TemplateDetail
-	loaded   bool
+	detail *templates.TemplateDetail
 
-	table   *widget.Table
-	kind    *widget.Select
-	mine    *checkRow
-	refresh *widget.Button
-	export  *widget.Button
-	apply   *widget.Button
-	publish *widget.Button
+	export *widget.Button
+	apply  *widget.Button
 
-	// afterLoad is said instead of the template count when the next load
-	// succeeds: a publish reloads the catalogue, and its confirmation must not
-	// be replaced by "N template(s)".
-	afterLoad string
-
-	// bar is the API address: the same component the Files tab has, without a
-	// session to end.
-	bar *addressBar
-	dot *canvas.Circle
-
-	// built is the tab's outer container, so a status message that changes
-	// height can lay the tab out again.
+	// built is the page, so a description that wraps can lay it out again and
+	// a late answer can tell whether its page is still the one on show.
 	built fyne.CanvasObject
 
 	summary   *prose
 	files     *prose
 	variables *prose
 	commands  *prose
-	status    *prose
 
-	// parts is the selected template in three tabs; each tab's label carries
-	// its count, so the detail is one pane instead of a long scroll.
+	// parts is the template in three tabs; each tab's label carries its count,
+	// so a person can see that a template has variables without opening it.
 	parts        *container.AppTabs
 	filesTab     *container.TabItem
 	variablesTab *container.TabItem
 	commandsTab  *container.TabItem
 }
 
-func newTemplatesView(u *ui) *templatesView {
-	view := &templatesView{
-		ui:       u,
-		selected: -1,
-		status:   newProse(""),
-	}
+func newTemplatePage(u *ui, report func(string, statusKind)) *templatePage {
+	page := &templatePage{ui: u, report: report}
 
-	view.table = widget.NewTable(
-		func() (int, int) { return len(view.items) + 1, 4 },
-		func() fyne.CanvasObject { return widget.NewLabel("") },
-		func(id widget.TableCellID, cell fyne.CanvasObject) {
-			label, ok := cell.(*widget.Label)
-			if !ok {
-				return
-			}
+	page.export = widget.NewButtonWithIcon("Save as bundle…", theme.DownloadIcon(), page.exportSelected)
+	page.apply = widget.NewButtonWithIcon("Apply…", theme.ConfirmIcon(), page.applySelected)
+	page.apply.Importance = widget.HighImportance
 
-			if id.Row == 0 {
-				label.TextStyle = fyne.TextStyle{Bold: true}
-				label.SetText([]string{"Name", "Kind", "Version", "Files"}[id.Col])
-				alignTemplateColumn(label, id.Col)
+	page.summary = selectableWrap()
+	page.files = selectableWrap()
+	page.variables = selectableWrap()
+	page.commands = selectableWrap()
 
-				return
-			}
+	page.filesTab = container.NewTabItem("Files (0)", part(page.files))
+	page.variablesTab = container.NewTabItem("Variables (0)", part(page.variables))
+	page.commandsTab = container.NewTabItem("Commands (0)", part(page.commands))
+	page.parts = container.NewAppTabs(page.filesTab, page.variablesTab, page.commandsTab)
 
-			label.TextStyle = fyne.TextStyle{}
-			alignTemplateColumn(label, id.Col)
+	page.show(nil)
 
-			index := id.Row - 1
-			if index < 0 || index >= len(view.items) {
-				label.SetText("")
-				return
-			}
-
-			item := view.items[index]
-			switch id.Col {
-			case 0:
-				label.SetText(item.Name)
-			case 1:
-				label.SetText(item.Kind)
-			case 2:
-				label.SetText(fmt.Sprintf("%d", item.Version))
-			case 3:
-				label.SetText(fmt.Sprintf("%d", item.FileCount))
-			}
-		},
-	)
-
-	// Four columns fit the smallest window without a squeeze; the owner and the
-	// visibility are in the summary of the selected template, where a person
-	// reads them once rather than on every row.
-	view.table.SetColumnWidth(0, 320)
-	view.table.SetColumnWidth(1, 120)
-	view.table.SetColumnWidth(2, 80)
-	view.table.SetColumnWidth(3, 70)
-
-	view.table.OnSelected = func(id widget.TableCellID) {
-		if id.Row == 0 {
-			view.table.UnselectAll()
-			view.selected = -1
-			view.showDetail(nil)
-			view.updateActions()
-			return
-		}
-
-		view.selected = id.Row - 1
-		view.loadSelected()
-	}
-
-	view.refresh = widget.NewButtonWithIcon("Refresh", theme.ViewRefreshIcon(), view.reload)
-	view.export = widget.NewButtonWithIcon("Save as bundle…", theme.DownloadIcon(), view.exportSelected)
-	view.apply = widget.NewButtonWithIcon("Apply…", theme.ConfirmIcon(), view.applySelected)
-	view.apply.Importance = widget.HighImportance
-	view.publish = widget.NewButtonWithIcon("Publish folder…", theme.UploadIcon(), view.publishFolder)
-
-	// The handler goes on after the first selection: SetSelected calls it, and
-	// a fetch during construction would race the tab that owns the status line.
-	view.kind = widget.NewSelect(append([]string{allKinds}, templates.Kinds...), nil)
-	view.kind.SetSelected(allKinds)
-	view.kind.OnChanged = func(string) { view.reload() }
-
-	view.mine = newCheckRow("Only my templates", func(bool) { view.reload() })
-
-	view.updateActions()
-
-	return view
+	return page
 }
 
-// content is the tab: the server bar, the filters, the catalogue, the selected
-// template and the message line.
-func (v *templatesView) content() fyne.CanvasObject {
-	// The bar is the same one the Files tab has: the address is one choice for
-	// both tabs, so it is editable here too. A connect from here reloads the
-	// catalogue from the new server.
-	v.bar = newAddressBar(v.ui, v.setStatus, false)
-	v.bar.afterConnect = v.reload
+// content is the page under a Back button.
+func (p *templatePage) content(title string, back func()) fyne.CanvasObject {
+	body := container.NewBorder(container.NewPadded(p.summary), nil, nil, nil, p.parts)
+	p.built = detailPage(title, back, body, p.export, p.apply)
 
-	// The dot colours the message at the bottom of the tab, so it is made
-	// before the bar that holds it.
-	v.dot = canvas.NewCircle(statusColour(v.ui.app.Settings().ThemeVariant(), statusIdle))
-
-	filters := container.NewHBox(muted("Kind"), v.kind, v.mine.row, layout.NewSpacer(), v.publish, v.refresh)
-
-	v.buildDetail()
-	split := container.NewVSplit(v.table, v.detailPane())
-	// The catalogue gets the larger share: the detail is one pane with tabs now,
-	// so it needs less room than four stacked sections did.
-	split.Offset = 0.55
-
-	top := container.NewVBox(
-		v.bar.content(),
-		widget.NewSeparator(),
-		container.NewPadded(filters),
-	)
-
-	v.built = container.NewBorder(top, statusBar(v.dot, v.status), nil, nil, split)
-
-	return v.built
+	return p.built
 }
 
-// buildDetail creates the summary, the three bodies and the sub-tabs that hold
-// them. With nothing selected the tabs are hidden and the summary says what to
-// do.
-func (v *templatesView) buildDetail() {
-	v.summary = selectableWrap()
-	v.files = selectableWrap()
-	v.variables = selectableWrap()
-	v.commands = selectableWrap()
+// openTemplate shows a template's page and fetches the whole template into it.
+func openTemplate(u *ui, pages *pager, item templates.TemplateData, report func(string, statusKind)) *templatePage {
+	page := newTemplatePage(u, report)
+	pages.push(page.content(item.Name, pages.back))
 
-	v.filesTab = container.NewTabItem("Files (0)", part(v.files))
-	v.variablesTab = container.NewTabItem("Variables (0)", part(v.variables))
-	v.commandsTab = container.NewTabItem("Commands (0)", part(v.commands))
+	id := item.ID.String()
+	client := u.client
 
-	v.parts = container.NewAppTabs(v.filesTab, v.variablesTab, v.commandsTab)
-	v.parts.Hide()
+	report("Loading "+item.Name+"…", statusPending)
 
-	v.showDetail(nil)
+	u.background(func() {
+		detail, err := client.GetTemplate(id)
+
+		fyne.Do(func() {
+			// Back may have been pressed, or another row opened, meanwhile.
+			if pages.stack.Objects[0] != page.built {
+				return
+			}
+
+			if err != nil {
+				page.summary.SetText("This template could not be loaded.")
+				report("The template could not be loaded: "+messageOf(err), statusError)
+				return
+			}
+
+			page.show(detail)
+			report(fmt.Sprintf("%s — %d file(s), %d command(s), %d variable(s).",
+				detail.Name, len(detail.Files), len(detail.Commands), len(detail.Variables)), statusOK)
+		})
+	})
+
+	return page
 }
 
 // part wraps one detail body in its own scroll: a template with forty files
@@ -224,238 +122,54 @@ func part(body *prose) fyne.CanvasObject {
 	return container.NewVScroll(container.NewPadded(body))
 }
 
-// detailPane is the selected template: its summary and the two actions that
-// work on it, above the three tabs.
-func (v *templatesView) detailPane() fyne.CanvasObject {
-	summary := container.NewPadded(v.summary)
-	actions := container.NewPadded(container.NewBorder(nil, nil, nil,
-		container.NewHBox(v.export, v.apply), nil))
-
-	return container.NewBorder(summary, actions, nil, nil, v.parts)
-}
-
-// alignTemplateColumn right-aligns the two numeric columns — version and file
-// count — so their digits line up. The rest are words and stay leading.
-func alignTemplateColumn(label *widget.Label, column int) {
-	label.Alignment = fyne.TextAlignLeading
-
-	if column == 2 || column == 3 {
-		label.Alignment = fyne.TextAlignTrailing
-	}
-}
-
-// selectableWrap is the one shape every value on this tab takes: wrapped, so a
+// selectableWrap is the one shape every value on this page takes: wrapped, so a
 // long path can neither widen the window nor paint over its neighbour, and
 // selectable, so it can be copied.
 func selectableWrap() *prose {
 	return newProse("")
 }
 
-// reload fetches the catalogue again with the current filters.
-func (v *templatesView) reload() {
-	// The client is read here, on the UI side, and used by the request: a
-	// connect replaces u.client, and a worker that read the field itself would
-	// be reading a pointer the UI is rewriting.
-	client := v.ui.client
-	address := client.BaseURL
-	kind := v.selectedKind()
-	mine := v.mine.Checked
-
-	v.setStatus("Loading the catalogue from "+address+"…", statusPending)
-
-	v.ui.background(func() {
-		items, err := client.ListTemplates(mine, kind)
-
-		fyne.Do(func() {
-			if err != nil {
-				v.items = nil
-				v.detail = nil
-				v.selected = -1
-				v.table.UnselectAll()
-				v.table.Refresh()
-				v.showDetail(nil)
-				v.updateActions()
-
-				// One sentence, and the button that answers it is on this tab
-				// (#338). The address is named because a wrong one is the
-				// usual cause, and the bar above is where it gets fixed.
-				if apiErrorStatus(err) == http.StatusUnauthorized {
-					// The catalogue asked for this account's own templates, or
-					// the address holds a token the API no longer accepts: the
-					// same rule as the Files tab, and the login card is there.
-					v.setStatus(sessionEnded, statusError)
-					v.ui.forgetSession(sessionEnded)
-
-					return
-				}
-
-				v.setStatus("Cannot load the catalogue from "+address+".", statusError)
-
-				return
-			}
-
-			// The "mine" route filters nothing on the server, so the kind is
-			// applied here for both shapes.
-			items = apiclient.FilterTemplates(items, kind)
-
-			v.items = items
-			v.detail = nil
-			v.selected = -1
-			v.loaded = true
-			v.table.UnselectAll()
-			v.table.Refresh()
-			v.showDetail(nil)
-			v.updateActions()
-
-			if note := v.afterLoad; note != "" {
-				v.afterLoad = ""
-				v.setStatus(note, statusOK)
-				return
-			}
-
-			if len(items) == 0 {
-				v.setStatus("No template matches. A shared file is not a template — publish a folder with Publish folder… (or `eznit template publish ./folder`).", statusOK)
-				return
-			}
-
-			v.setStatus(fmt.Sprintf("%d template(s) on %s.", len(items), address), statusOK)
-		})
-	})
-}
-
-// ensureLoaded fetches the catalogue the first time the tab is opened.
-func (v *templatesView) ensureLoaded() {
-	if v.loaded {
-		return
-	}
-
-	v.reload()
-}
-
-// forget drops what was loaded, so the next visit reloads from the new server.
-func (v *templatesView) forget() {
-	v.loaded = false
-	v.items = nil
-	v.detail = nil
-	v.selected = -1
-
-	if v.table != nil {
-		v.table.UnselectAll()
-		v.table.Refresh()
-	}
-
-	v.showDetail(nil)
-	v.updateActions()
-}
-
-// selectedKind is the filter's kind, or "" for all of them.
-func (v *templatesView) selectedKind() string {
-	if v.kind == nil || v.kind.Selected == allKinds || v.kind.Selected == "" {
-		return ""
-	}
-
-	return v.kind.Selected
-}
-
-func (v *templatesView) selectedTemplate() (templates.TemplateData, bool) {
-	if v.selected < 0 || v.selected >= len(v.items) {
-		return templates.TemplateData{}, false
-	}
-
-	return v.items[v.selected], true
-}
-
-// loadSelected fetches the whole template: its files, questions and commands.
-func (v *templatesView) loadSelected() {
-	item, ok := v.selectedTemplate()
-	if !ok {
-		return
-	}
-
-	id := item.ID.String()
-	client := v.ui.client
-
-	v.detail = nil
-	v.showDetail(nil)
-	v.updateActions()
-	v.setStatus("Loading "+item.Name+"…", statusPending)
-
-	v.ui.background(func() {
-		detail, err := client.GetTemplate(id)
-
-		fyne.Do(func() {
-			// The selection may have moved while the request was in flight.
-			current, ok := v.selectedTemplate()
-			if !ok || current.ID.String() != id {
-				return
-			}
-
-			if err != nil {
-				v.setStatus("The template could not be loaded: "+messageOf(err), statusError)
-				return
-			}
-
-			v.detail = detail
-			v.showDetail(detail)
-			v.updateActions()
-
-			v.setStatus(fmt.Sprintf("%s — %d file(s), %d command(s), %d variable(s).",
-				detail.Name, len(detail.Files), len(detail.Commands), len(detail.Variables)), statusOK)
-		})
-	})
-}
-
-// showDetail fills the summary and the three tabs, or says how to fill them.
-func (v *templatesView) showDetail(detail *templates.TemplateDetail) {
-	v.detail = detail
-
-	if v.summary == nil {
-		return
-	}
+// show fills the summary and the three tabs; without a template it says the
+// page is loading and keeps the actions off.
+func (p *templatePage) show(detail *templates.TemplateDetail) {
+	p.detail = detail
 
 	if detail == nil {
-		v.summary.SetText("Select a template to see its files, variables and commands.")
-		v.files.SetText("")
-		v.variables.SetText("")
-		v.commands.SetText("")
-
-		if v.parts != nil {
-			v.parts.Hide()
-		}
-
-		relayout(v.built)
+		p.summary.SetText("Loading the template…")
+		p.files.SetText("")
+		p.variables.SetText("")
+		p.commands.SetText("")
+		p.parts.Hide()
+		p.export.Disable()
+		p.apply.Disable()
+		relayout(p.built)
 
 		return
 	}
 
-	visibility := "private"
-	if detail.IsPublic {
-		visibility = "shared"
-	}
-
-	summary := fmt.Sprintf("%s — %s, version %d — %s — by %s", detail.Name, detail.Kind, detail.Version, visibility, detail.OwnerEmail)
+	summary := fmt.Sprintf("%s — %s, version %d — %s — by %s",
+		detail.Name, detail.Kind, detail.Version, visibilityOf(detail.IsPublic), detail.OwnerEmail)
 	if strings.TrimSpace(detail.Description) != "" {
 		summary += "\n\n" + detail.Description
 	}
 
-	v.summary.SetText(summary)
-	v.files.SetText(linesOr(detail.Files, fileLine, "No files."))
-	v.variables.SetText(linesOr(detail.Variables, variableLine, "None — this template asks nothing."))
-	v.commands.SetText(linesOr(detail.Commands, commandLine, "No commands."))
+	p.summary.SetText(summary)
+	p.files.SetText(linesOr(detail.Files, fileLine, "No files."))
+	p.variables.SetText(linesOr(detail.Variables, variableLine, "None — this template asks nothing."))
+	p.commands.SetText(linesOr(detail.Commands, commandLine, "No commands."))
 
-	// The counts are in the tab labels, so a person can see that a template has
-	// variables without opening the tab.
-	if v.parts != nil {
-		v.filesTab.Text = fmt.Sprintf("Files (%d)", len(detail.Files))
-		v.variablesTab.Text = fmt.Sprintf("Variables (%d)", len(detail.Variables))
-		v.commandsTab.Text = fmt.Sprintf("Commands (%d)", len(detail.Commands))
-		v.parts.Show()
-		v.parts.Refresh()
-	}
+	p.filesTab.Text = fmt.Sprintf("Files (%d)", len(detail.Files))
+	p.variablesTab.Text = fmt.Sprintf("Variables (%d)", len(detail.Variables))
+	p.commandsTab.Text = fmt.Sprintf("Commands (%d)", len(detail.Commands))
+	p.parts.Show()
+	p.parts.Refresh()
 
-	// A description is prose: it can wrap to more lines than the pane was
+	p.export.Enable()
+	p.apply.Enable()
+
+	// A description is prose: it can wrap to more lines than the page was
 	// measured for.
-	relayout(v.built)
+	relayout(p.built)
 }
 
 // linesOr renders a slice one per line, or the empty state when it has
@@ -543,62 +257,14 @@ func byteSize(size int64) string {
 	}
 }
 
-// updateActions keeps Save as bundle off until there is a template to save.
-func (v *templatesView) updateActions() {
-	if v.export == nil {
+// exportSelected saves the template on show as the offline bundle.
+func (p *templatePage) exportSelected() {
+	if p.detail == nil {
+		p.report("The template is still loading.", statusWarn)
 		return
 	}
 
-	for _, button := range []*widget.Button{v.export, v.apply} {
-		if button == nil {
-			continue
-		}
-
-		if v.detail != nil {
-			button.Enable()
-		} else {
-			button.Disable()
-		}
-	}
-}
-
-// exportSelected writes the selected template as the offline bundle the CLI
-// reads, so the window and `template export` produce the same file.
-func (v *templatesView) exportSelected() {
-	detail := v.detail
-	if detail == nil {
-		v.setStatus("Select a template first — Save as bundle writes the selected one.", statusWarn)
-		return
-	}
-
-	save := dialog.NewFileSave(func(writer fyne.URIWriteCloser, err error) {
-		if err != nil {
-			v.setStatus("The destination could not be chosen: "+err.Error(), statusError)
-			return
-		}
-		if writer == nil {
-			return
-		}
-
-		path := writer.URI().Path()
-
-		if err := exportBundle(writer, detail); err != nil {
-			writer.Close()
-			v.setStatus("The bundle could not be written: "+err.Error(), statusError)
-			return
-		}
-
-		if err := writer.Close(); err != nil {
-			v.setStatus("The bundle was written but could not be closed: "+err.Error(), statusError)
-			return
-		}
-
-		v.setStatus(fmt.Sprintf("Saved %s. Apply it with `eznit template apply --from-file %s`.", path, path), statusOK)
-	}, v.ui.window)
-
-	save.SetFileName(bundleFilename(detail))
-	save.SetFilter(storage.NewExtensionFileFilter([]string{bundleExtension}))
-	save.Show()
+	saveBundle(p.ui, p.detail, p.report)
 }
 
 // exportBundle turns a template into the bundle format and writes it. It is
@@ -644,48 +310,28 @@ func bundleFilename(detail *templates.TemplateDetail) string {
 	return name + bundleExtension
 }
 
-// setStatus writes the message under the split, colours the dot with it, and
-// colours the words: a red dot and grey text is half an error message.
-func (v *templatesView) setStatus(text string, kind statusKind) {
-	if v.status == nil {
-		return
-	}
-
-	v.status.Importance = statusImportance(kind)
-	v.status.SetText(text)
-
-	if v.dot != nil {
-		v.dot.FillColor = statusColour(v.ui.app.Settings().ThemeVariant(), kind)
-		v.dot.Refresh()
-	}
-
-	// A longer message is a taller bar, and the row it sits in was measured
-	// before the text arrived.
-	relayout(v.built)
-}
-
 // applySelected writes the selected template into a folder the person picks:
 // check what is there, ask the questions the template needs, then write.
 //
 // The order is the CLI's: the files are checked before anything is asked,
 // because a person should not answer what a template wants to know for a write
 // that cannot happen.
-func (v *templatesView) applySelected() {
+func (v *templatePage) applySelected() {
 	detail := v.detail
 	if detail == nil {
-		v.setStatus("Select a template first — Apply writes the selected one.", statusWarn)
+		v.report("The template is still loading.", statusWarn)
 		return
 	}
 
 	files, err := templateapply.Files(detail)
 	if err != nil {
-		v.setStatus("This template cannot be written: "+err.Error(), statusError)
+		v.report("This template cannot be written: "+err.Error(), statusError)
 		return
 	}
 
 	dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
 		if err != nil {
-			v.setStatus("The folder could not be chosen: "+err.Error(), statusError)
+			v.report("The folder could not be chosen: "+err.Error(), statusError)
 			return
 		}
 		if uri == nil {
@@ -696,7 +342,7 @@ func (v *templatesView) applySelected() {
 
 		existing, err := templateapply.Existing(target, files)
 		if err != nil {
-			v.setStatus("This template cannot be written into that folder: "+err.Error(), statusError)
+			v.report("This template cannot be written into that folder: "+err.Error(), statusError)
 			return
 		}
 
@@ -723,7 +369,7 @@ func (v *templatesView) applySelected() {
 // askForValues collects the answers a template needs: its declared variables
 // and the placeholders its files use without declaring them. Nothing is written
 // while a required answer is empty.
-func (v *templatesView) askForValues(detail *templates.TemplateDetail, files []templateapply.File, target string) {
+func (v *templatePage) askForValues(detail *templates.TemplateDetail, files []templateapply.File, target string) {
 	undeclared := templateapply.Undeclared(files, detail.Variables)
 
 	rows := make([]formRow, 0, len(detail.Variables)+len(undeclared))
@@ -837,7 +483,7 @@ func applyTemplate(target string, files []templateapply.File, values map[string]
 }
 
 // showWritten names every path that was written, selectable, with a copy.
-func (v *templatesView) showWritten(target string, files []templateapply.File) {
+func (v *templatePage) showWritten(target string, files []templateapply.File) {
 	paths := make([]string, 0, len(files))
 
 	for _, file := range files {
@@ -859,5 +505,5 @@ func (v *templatesView) showWritten(target string, files []templateapply.File) {
 
 	dialog.ShowCustom(fmt.Sprintf("Wrote %d file(s)", len(paths)), "Close", body, v.ui.window)
 
-	v.setStatus(fmt.Sprintf("Wrote %d file(s) into %s.", len(paths), target), statusOK)
+	v.report(fmt.Sprintf("Wrote %d file(s) into %s.", len(paths), target), statusOK)
 }

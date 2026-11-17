@@ -146,7 +146,7 @@ func SameHost(left, right string) bool {
 	return first.Hostname() != "" && first.Hostname() == second.Hostname()
 }
 
-// Health asks the instance whether it answers. It is the route the Server tab
+// Health asks the instance whether it answers. It is the route the Local server tab
 // polls, it needs no session, and it touches no database: it reports that the
 // process is up and nothing more.
 func (c *Client) Health() error {

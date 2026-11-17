@@ -185,7 +185,7 @@ func (l *loginView) toggleMode() {
 
 	l.signup = !l.signup
 	l.setStatus("", statusIdle)
-	l.ui.setFilesTab(l.content())
+	l.ui.setAccountTab(l.content())
 }
 
 // setStatus writes the line under the form, in the colour its kind earns: a

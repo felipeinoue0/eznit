@@ -8,7 +8,7 @@ import (
 )
 
 // Inspect reads what a folder has of a bundle and names what is missing. It is
-// the rule the Server tab asks before it offers Start or Create, so it is
+// the rule the Local server tab asks before it offers Start or Create, so it is
 // tested without a window.
 func TestInspectBundle(t *testing.T) {
 	binary := filepath.Join(t.TempDir(), BinaryName())

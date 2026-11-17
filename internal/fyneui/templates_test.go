@@ -5,6 +5,7 @@ package fyneui
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"strings"
 	"testing"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
@@ -23,10 +25,9 @@ import (
 	"github.com/fiwon123/eznit/internal/templateapply"
 )
 
-// newTestTemplatesView builds the tab for an address. Nothing is fetched: the
-// tests put their own rows in, which is the only way to exercise the rendering
-// without a server.
-func newTestTemplatesView(t *testing.T, address apiChoice) *templatesView {
+// newTestTemplatePage builds a template's page on its own, with a status line
+// the test can read. Nothing is fetched: the tests put the template in.
+func newTestTemplatePage(t *testing.T) (*templatePage, *string) {
 	t.Helper()
 
 	t.Setenv(config.Env, filepath.Join(t.TempDir(), "config.json"))
@@ -35,20 +36,18 @@ func newTestTemplatesView(t *testing.T, address apiChoice) *templatesView {
 	t.Cleanup(app.Quit)
 
 	u := &ui{
-		app:     app,
-		window:  app.NewWindow("test"),
-		address: address,
-		client:  apiclient.New(address.url),
+		app:    app,
+		window: app.NewWindow("test"),
+		client: apiclient.New("http://127.0.0.1:4321"),
 	}
 
-	u.templates = newTemplatesView(u)
-	u.window.SetContent(u.templates.content())
+	status := new(string)
+	page := newTemplatePage(u, func(text string, _ statusKind) { *status = text })
+	u.window.SetContent(page.content("My starter", func() {}))
 
-	// A catalogue fetch runs on the window's tally; wait for it before the
-	// driver goes away (#333).
 	t.Cleanup(u.settle)
 
-	return u.templates
+	return page, status
 }
 
 // sampleDetail is one template with every part a section can show: two files
@@ -83,10 +82,9 @@ func sampleDetail(t *testing.T) *templates.TemplateDetail {
 
 // The detail panel is the whole template in four selectable parts.
 func TestTemplatesDetailShowsEveryPart(t *testing.T) {
-	view := newTestTemplatesView(t, apiChoice{url: "http://127.0.0.1:4321", source: "the default"})
+	view, _ := newTestTemplatePage(t)
 
-	view.showDetail(sampleDetail(t))
-	view.updateActions()
+	view.show(sampleDetail(t))
 
 	for _, want := range []string{"My starter", "version 3", "shared", "you@example.com", "The files a new project starts with."} {
 		if !strings.Contains(view.summary.Text, want) {
@@ -131,18 +129,17 @@ func TestTemplatesDetailShowsEveryPart(t *testing.T) {
 	}
 }
 
-// Without a selection the panel says what to do and the export is off.
-func TestTemplatesWithoutASelection(t *testing.T) {
-	view := newTestTemplatesView(t, apiChoice{url: "http://127.0.0.1:4321", source: "the default"})
+// While the template loads the page says so, and its actions are off.
+func TestTemplatePageWhileLoading(t *testing.T) {
+	view, _ := newTestTemplatePage(t)
 
-	view.showDetail(nil)
-	view.updateActions()
+	view.show(nil)
 
-	if !strings.Contains(view.summary.Text, "Select a template") {
-		t.Errorf("summary = %q, want it to ask for a selection", view.summary.Text)
+	if !strings.Contains(view.summary.Text, "Loading") {
+		t.Errorf("summary = %q, want it to say the template is loading", view.summary.Text)
 	}
-	if !view.export.Disabled() {
-		t.Error("Save as bundle is enabled with no template loaded")
+	if !view.export.Disabled() || !view.apply.Disabled() {
+		t.Error("Save as bundle or Apply is enabled with no template loaded")
 	}
 }
 
@@ -224,30 +221,6 @@ func TestBundleFilename(t *testing.T) {
 	}
 }
 
-// Deselecting drops the detail too: Save as bundle must not stay on for a
-// template that is no longer selected.
-func TestTemplatesHeaderRowDeselects(t *testing.T) {
-	view := newTestTemplatesView(t, apiChoice{url: "http://127.0.0.1:4321", source: "the default"})
-
-	detail := sampleDetail(t)
-	view.items = []templates.TemplateData{detail.TemplateData}
-	view.showDetail(detail)
-	view.updateActions()
-
-	if view.export.Disabled() {
-		t.Fatal("Save as bundle is off before anything was deselected")
-	}
-
-	view.table.OnSelected(widget.TableCellID{Row: 0})
-
-	if !view.export.Disabled() {
-		t.Error("Save as bundle is still on after the selection was cleared")
-	}
-	if !strings.Contains(view.summary.Text, "Select a template") {
-		t.Errorf("summary = %q, want the empty state", view.summary.Text)
-	}
-}
-
 // Applying writes the template with the answers filled in, and leaves a binary
 // file's bytes alone. This is the write path without the dialogs.
 func TestApplyTemplateSubstitutesAndWrites(t *testing.T) {
@@ -313,29 +286,29 @@ func TestMissingAnswer(t *testing.T) {
 	}
 }
 
-// Apply without a selected template says so and opens nothing.
-func TestApplyNeedsASelection(t *testing.T) {
-	view := newTestTemplatesView(t, apiChoice{url: "http://127.0.0.1:4321", source: "the default"})
+// Apply before the template has arrived says so and opens nothing.
+func TestApplyWaitsForTheTemplate(t *testing.T) {
+	view, status := newTestTemplatePage(t)
 
-	view.showDetail(nil)
+	view.show(nil)
 	view.applySelected()
 
-	if !strings.Contains(view.status.Text, "Select a template") {
-		t.Errorf("status = %q, want it to ask for a selection", view.status.Text)
+	if !strings.Contains(*status, "still loading") {
+		t.Errorf("status = %q, want it to say the template is still loading", *status)
 	}
 }
 
 // A template that asks nothing says so in words: a bare dash in the Variables
 // section is not an answer anyone can act on.
 func TestTemplatesEmptySectionsSaySo(t *testing.T) {
-	view := newTestTemplatesView(t, apiChoice{url: "http://127.0.0.1:4321", source: "the default"})
+	view, _ := newTestTemplatePage(t)
 
 	detail := sampleDetail(t)
 	detail.Files = nil
 	detail.Variables = nil
 	detail.Commands = nil
 
-	view.showDetail(detail)
+	view.show(detail)
 
 	for name, section := range map[string]*prose{
 		"files":     view.files,
@@ -401,98 +374,63 @@ func TestVariableLine(t *testing.T) {
 	}
 }
 
-// The filters say what they filter: a caption for the kind, a checkbox that
-// names whose templates, and a placeholder that explains what a template is
-// before anything is selected.
-func TestTemplatesFiltersExplainThemselves(t *testing.T) {
-	view := newTestTemplatesView(t, apiChoice{url: "http://127.0.0.1:4321", source: "the default"})
+// Refresh is on both lists, not only in the code: an error line used to point
+// at a button nobody could press (#338).
+func TestRefreshIsOnBothLists(t *testing.T) {
+	u := newTestUI(t)
 
-	if got := view.mine.label.Text; got != "Only my templates" {
-		t.Errorf("checkbox = %q, want it to say whose templates are shown", got)
-	}
-
-	if findLabel(view.ui.window.Content(), "Kind") == nil {
-		t.Error("the kind filter has no caption")
-	}
-
-	for _, want := range []string{"Select a template", "files", "variables", "commands"} {
-		if !strings.Contains(view.summary.Text, want) {
-			t.Errorf("the placeholder = %q, want it to mention %q", view.summary.Text, want)
+	for name, view := range map[string]struct {
+		built   fyne.CanvasObject
+		refresh *widget.Button
+	}{
+		"Web":        {u.web.built, u.web.refresh},
+		"My Account": {u.account.built, u.account.refresh},
+	} {
+		if !holds(view.built, view.refresh) {
+			t.Errorf("%s: the Refresh button is not part of the tab", name)
+		}
+		if view.refresh.Disabled() || view.refresh.OnTapped == nil {
+			t.Errorf("%s: Refresh cannot be pressed", name)
 		}
 	}
 }
 
-// The catalogue's Refresh is on the tab, not only in the code: the error line
-// used to point at a button nobody could press (#338).
-func TestTemplatesRefreshIsOnTheTab(t *testing.T) {
-	view := newTestTemplatesView(t, apiChoice{url: "http://127.0.0.1:4321", source: "the default"})
+// Opening a template row fetches the whole template into its own page, with
+// Back, Save as bundle and Apply.
+func TestOpenTemplateLoadsIntoAPage(t *testing.T) {
+	detail := sampleDetail(t)
 
-	if !holds(view.built, view.refresh) {
-		t.Fatal("the Refresh button is not part of the tab")
-	}
-
-	if view.refresh.Disabled() {
-		t.Error("Refresh is disabled, so a failed load cannot be retried")
-	}
-
-	if view.refresh.OnTapped == nil {
-		t.Error("Refresh runs nothing")
-	}
-}
-
-// A catalogue the API refuses ends the session the same way a refused listing
-// does: the tab says so, and the login card is on the Files tab. Without this
-// the tab would keep offering Refresh against a token that cannot work (#335).
-func TestRefusedCatalogueEndsTheSession(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = w.Write([]byte(`{"status_code":401,"error":"Invalid token"}`))
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": detail})
 	}))
 	t.Cleanup(server.Close)
 
 	u := newTestUI(t)
 	u.client = apiclient.New(server.URL)
-	u.client.Token = "dead-token"
 
-	u.templates.reload()
-
-	// Wait for the answer instead of polling the tree: the poll reads widgets
-	// the worker writes (the test driver runs fyne.Do inline), which was one of
-	// the races #333 recorded.
+	page := openTemplate(u, u.web.pages, detail.TemplateData, u.web.setStatus)
 	u.settle()
 
-	if findButton(u.tabs.Items[0].Content, "Log in") == nil {
-		t.Fatal("a refused catalogue did not bring the login card back")
+	if u.web.pages.atHome() {
+		t.Fatal("the template's page is not on show")
 	}
-
-	if !strings.Contains(u.templates.status.Text, "session ended") {
-		t.Errorf("the tab says %q, want it to say the session ended", u.templates.status.Text)
+	if page.detail == nil || page.export.Disabled() || page.apply.Disabled() {
+		t.Fatalf("the page did not load the template (status %q)", u.web.status.Text)
 	}
-}
-
-// Four columns fit the smallest window: Name, Kind, Version, Files. The owner
-// and the visibility live in the summary of the selected template.
-func TestTemplatesTableHasFourColumns(t *testing.T) {
-	view := newTestTemplatesView(t, apiChoice{url: "http://127.0.0.1:4321", source: "the default"})
-
-	rows, columns := view.table.Length()
-
-	if columns != 4 {
-		t.Errorf("the table has %d columns, want 4", columns)
-	}
-
-	if rows != len(view.items)+1 {
-		t.Errorf("the table has %d rows, want the header plus %d templates", rows, len(view.items))
+	for _, caption := range []string{"Back", "Save as bundle…", "Apply…"} {
+		if findButton(page.built, caption) == nil {
+			t.Errorf("the template's page has no %q", caption)
+		}
 	}
 }
 
 // The detail is one pane with a count per tab, and the tabs are hidden until
 // there is something to show.
 func TestTemplatesDetailTabsCarryCounts(t *testing.T) {
-	view := newTestTemplatesView(t, apiChoice{url: "http://127.0.0.1:4321", source: "the default"})
+	view, _ := newTestTemplatePage(t)
 
-	view.showDetail(sampleDetail(t))
+	view.show(sampleDetail(t))
 
 	for tab, want := range map[*container.TabItem]string{
 		view.filesTab:     "Files (2)",
@@ -508,7 +446,7 @@ func TestTemplatesDetailTabsCarryCounts(t *testing.T) {
 		t.Error("the tabs are hidden although a template is selected")
 	}
 
-	view.showDetail(nil)
+	view.show(nil)
 
 	if view.parts.Visible() {
 		t.Error("the tabs are visible with nothing selected")

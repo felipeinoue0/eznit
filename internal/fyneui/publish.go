@@ -27,7 +27,7 @@ import (
 
 // publishSignedOut is what the button says without a session. Browsing and
 // applying need no account; publishing puts something on the server under one.
-const publishSignedOut = "Sign in on the Files tab to publish a template. Browsing and applying need no account."
+const publishSignedOut = "Sign in on My Account to publish a template. Browsing and applying need no account."
 
 // publishForm is what a person fills in; buildPublishRequest turns it and the
 // collected files into the API's request.
@@ -94,7 +94,7 @@ func buildPublishRequest(form publishForm, files []templateapply.File) (template
 
 // publishFolder asks for a folder, reads it off the UI thread, and opens the
 // form. Without a session it says where to sign in instead.
-func (v *templatesView) publishFolder() {
+func (v *accountView) publishFolder() {
 	if v.ui.client.Token == "" {
 		v.setStatus(publishSignedOut, statusWarn)
 		return
@@ -145,7 +145,7 @@ type publishDialog struct {
 
 // showPublishForm is the CLI's prompts as one dialog: name, kind, description,
 // visibility, and a default for each placeholder.
-func (v *templatesView) showPublishForm(root string, files []templateapply.File, skipped []string) *publishDialog {
+func (v *accountView) showPublishForm(root string, files []templateapply.File, skipped []string) *publishDialog {
 	name := widget.NewEntry()
 	name.SetText(filepath.Base(root))
 
