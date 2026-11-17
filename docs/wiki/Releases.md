@@ -64,7 +64,7 @@ platform is in the archive name, never in the binary name.
 
 | Asset | Contents |
 | --- | --- |
-| `eznit_<version>_<os>_<arch>.zip` (Windows) / `.tar.gz` (Linux, macOS) | `eznit` (the CLI and the API — `eznit serve`), `ez`, `eznit-gui`, `add_to_path.ps1` or `add_to_path.sh`, `db/migrations/`, `scripts/run_migrate.sh`, `docker-compose.yml`, the example configuration and secret files, `RUNNING.md`, README, LICENSE, LICENSE-FYNE, LICENSE-APACHE, NOTICE |
+| `eznit_<version>_<os>_<arch>.zip` (Windows) / `.tar.gz` (Linux, macOS) | `eznit` (the CLI and the API — `eznit serve`), `ez`, `eznit-gui`, `add_to_path.ps1` or `add_to_path.sh`, `db/migrations/`, `scripts/run_migrate.sh`, `docker-compose.yml`, the example configuration and secret files, `RUNNING.md`, README, LICENSE, LICENSE-FYNE, LICENSE-APACHE, LICENSE-ZENITY, NOTICE |
 | `checksums.txt` | SHA-256 of every archive |
 
 Each archive is checked after it is written: exactly one top-level folder, named

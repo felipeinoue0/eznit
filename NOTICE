@@ -23,10 +23,14 @@ toolkit and its dependencies:
   raster backends, licensed under the BSD 3-Clause License.
 - nfnt/resize (https://github.com/nfnt/resize), licensed under the ISC
   License.
+- ncruces/zenity (https://github.com/ncruces/zenity), the operating system's
+  file and folder dialogs, licensed under the MIT License; the text is in
+  LICENSE-ZENITY.
 - golang.org/x/image, golang.org/x/text and golang.org/x/sys
   (https://golang.org/x), licensed under the BSD 3-Clause License.
 
 The full licence text of each module travels in the Go module cache and in the
-module's own repository; the three texts required to accompany a binary
+module's own repository; the texts required to accompany a binary
 distribution are included in this folder: LICENSE (this project, MIT),
-LICENSE-FYNE (BSD 3-Clause) and LICENSE-APACHE (Apache 2.0).
+LICENSE-FYNE (BSD 3-Clause), LICENSE-APACHE (Apache 2.0) and LICENSE-ZENITY
+(MIT).
