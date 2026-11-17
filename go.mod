@@ -13,7 +13,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.24
 	github.com/minio/selfupdate v0.6.0
 	github.com/ncruces/zenity v0.10.15
-	github.com/pelletier/go-toml/v2 v2.2.4
+	github.com/pelletier/go-toml/v2 v2.4.3
 	github.com/swaggo/files/v2 v2.0.2
 	go.uber.org/zap v1.28.0
 	go.uber.org/zap/exp v0.3.0
