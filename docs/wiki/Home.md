@@ -48,7 +48,7 @@ subscription and no third party.
 | 🧩 publish and apply a template | [Templates and skills](https://github.com/fiwon123/eznit/wiki/Templates-and-Skills) | ⏱️ 10 min |
 | 💻 look up a command or flag | [CLI Reference](https://github.com/fiwon123/eznit/wiki/CLI-Reference) | 📖 reference |
 | ⚙️ set a variable, secret or port | [Configuration](https://github.com/fiwon123/eznit/wiki/Configuration) | 📖 reference |
-| 🖥️ run it on a VPS **without losing data** | [Deploying on a VPS](https://github.com/fiwon123/eznit/wiki/Deploying-on-a-VPS) | ⏱️ 30 min |
+| 🖥️ run it on a VPS **without losing data** | [Deploying on a VPS](https://github.com/fiwon123/eznit/wiki/Deploying-on-a-VPS) | ⏱️ 15 min |
 | 🐧 know what runs on my OS or shell | [Platforms and shells](https://github.com/fiwon123/eznit/wiki/Platforms-and-Shells) | 📖 reference |
 | 🧯 fix an error | [Troubleshooting](https://github.com/fiwon123/eznit/wiki/Troubleshooting) | 🔎 lookup |
 | 🛠️ change the code or cut a release | [Development](https://github.com/fiwon123/eznit/wiki/Development) · [Releases](https://github.com/fiwon123/eznit/wiki/Releases) | 📖 reference |

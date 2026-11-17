@@ -367,7 +367,7 @@ migrate_force:
 ## Docker
 unexport
 
-.PHONY: docker_up docker_down docker_up_all docker_down_v up preflight-ports backup restore
+.PHONY: docker_up docker_down docker_up_all docker_down_v up preflight-ports backup restore vps-init vps-update
 
 # Which entry point is starting. Set by the target that depends on
 # `preflight-ports`, and only read there.
@@ -441,6 +441,16 @@ backup: ## Back up the database and the uploads into $(BACKUP_DIR)/<timestamp>/
 restore: ## Restore BACKUP=<dir> over the current data (takes a safety backup first)
 	@if [ -z "$(BACKUP)" ]; then echo "usage: make restore BACKUP=$(BACKUP_DIR)/<timestamp>" >&2; exit 2; fi
 	@sh scripts/restore.sh "$(BACKUP)"
+
+# A public server in three commands (#398), see docs/wiki/Deploying-on-a-VPS.md:
+#   make vps-init DOMAIN=eznit.example.com   once: password, private ports, HTTPS
+#   docker compose up -d / docker compose down
+#   make vps-update [TAG=vX.Y.Z]             back up, then move to a release
+vps-init: setup ## Prepare this checkout as a public HTTPS server: DOMAIN=<host name>
+	@sh scripts/vps-init.sh "$(DOMAIN)"
+
+vps-update: ## Back up, then move to the newest release (or TAG=vX.Y.Z) and rebuild
+	@sh scripts/vps-update.sh "$(TAG)"
 
 ## Development
 .PHONY: run_api run_cli run_jq
