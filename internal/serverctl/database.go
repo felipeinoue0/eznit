@@ -1,6 +1,7 @@
 package serverctl
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -29,6 +30,13 @@ var (
 
 	// ErrNoAnswer is a database that was started and still does not answer.
 	ErrNoAnswer = errors.New("nothing answers on the database address")
+
+	// ErrPortTaken is a database address that answers while the folder's own
+	// `db` is not running: another database holds the port — typically a
+	// second checkout's Compose stack. The folder's migrate job would try to
+	// start its own `db` on the same port and fail with a bare exit status, so
+	// the step refuses first and says why (#385).
+	ErrPortTaken = errors.New("another database answers on this folder's database address")
 )
 
 // The defaults the compose file uses when .env says nothing. They are repeated
@@ -84,6 +92,10 @@ type preparer struct {
 	poll  time.Duration
 	reach func(host, port string, timeout time.Duration) bool
 	look  func(string) (string, error)
+
+	// running reports whether the folder's own `db` service is up. nil asks
+	// the runtime (`compose ps -q db`); a test replaces it.
+	running func(compose composeRuntime, environ []string) (bool, error)
 }
 
 func (p preparer) run() (Result, error) {
@@ -160,11 +172,51 @@ func (p preparer) migrateAnsweredDatabase(composeFile string, compose composeRun
 		return Result{}, ErrNoPassword
 	}
 
+	if err := p.ownsAnsweredDatabase(compose, environ, address); err != nil {
+		return Result{}, err
+	}
+
 	if err := compose.run(p.ctx, p.dir, environ, p.out, "run", "--rm", "migrate"); err != nil {
 		return Result{}, err
 	}
 
 	return Result{Migrated: true}, nil
+}
+
+// ownsAnsweredDatabase refuses an answering address whose database is not the
+// folder's own: the port answering says only that *something* listens there.
+// The migrate service reaches the folder's `db` over the Compose network, so
+// running it while another database holds the port starts a second `db` that
+// cannot bind it (#385).
+//
+// A runtime that cannot answer the question is not held against the folder:
+// the step then does what it did before, rather than refusing a setup that
+// works.
+func (p preparer) ownsAnsweredDatabase(compose composeRuntime, environ []string, address database) error {
+	running := p.running
+	if running == nil {
+		running = p.composeRunning
+	}
+
+	owned, err := running(compose, environ)
+	if err != nil || owned {
+		return nil
+	}
+
+	return fmt.Errorf("%w (%s)", ErrPortTaken, address)
+}
+
+// composeRunning asks the runtime whether the folder's `db` container is up:
+// `ps -q` prints the id of each running container of the service, and nothing
+// when there is none.
+func (p preparer) composeRunning(compose composeRuntime, environ []string) (bool, error) {
+	var ids bytes.Buffer
+
+	if err := compose.run(p.ctx, p.dir, environ, &ids, "ps", "-q", "db"); err != nil {
+		return false, err
+	}
+
+	return strings.TrimSpace(ids.String()) != "", nil
 }
 
 // composeFile is the file this folder's services are declared in, or "" when

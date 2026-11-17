@@ -1195,6 +1195,11 @@ func databaseNote(result serverctl.Result) string {
 	}
 }
 
+// portTakenNote is #385 in words: the address answers, but not from this
+// folder's database. Start and Reset both refuse it before running anything.
+const portTakenNote = "Another database already answers on this folder's DB_HOST and DB_PORT, and it is not this folder's own — " +
+	"often another eznit stack, such as a checkout's make dev-up. Stop it, or set a different DB_PORT in Configuration (for example 5433), then try again."
+
 // databaseNoteForFailure turns the database step's error into what a person can
 // do about it. Each case is a different fix, which is why the step has sentinel
 // errors instead of one message.
@@ -1209,6 +1214,8 @@ func databaseNoteForFailure(err error) string {
 	case errors.Is(err, serverctl.ErrNoPassword):
 		return "No database answers, and this folder has no " + serverctl.SecretPath +
 			" — set the database password in Configuration first, then press Start again."
+	case errors.Is(err, serverctl.ErrPortTaken):
+		return portTakenNote
 	case errors.Is(err, serverctl.ErrNoAnswer):
 		return "The database did not answer after it was started — press Start again in a moment. " +
 			"If DB_HOST names a service (such as db), a server run on this machine has to use 127.0.0.1 instead."
