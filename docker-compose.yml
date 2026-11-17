@@ -224,6 +224,30 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  caddy:
+    # HTTPS for a public server (#398). Off unless the `https` profile is on:
+    # `make vps-init DOMAIN=…` writes COMPOSE_PROFILES=https and DOMAIN into
+    # .env, and from then on plain `docker compose up -d` includes it. Caddy
+    # fetches and renews the certificate for DOMAIN by itself (ports 80 and 443
+    # must be free and reachable, and DOMAIN's DNS must point here), and reaches
+    # the UI over the compose network, so `web` stays on WEB_BIND=127.0.0.1.
+    # The certificates live in `caddy-data`, so a recreate does not ask the
+    # certificate authority again.
+    image: caddy:2.11.9-alpine
+    profiles: ["https"]
+    command: ["caddy", "reverse-proxy", "--from", "${DOMAIN:-localhost}", "--to", "web:80"]
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      web:
+        condition: service_started
+    restart: unless-stopped
+
   web-dev:
     # The developer frontend: the Vite dev server, not the nginx image the
     # product builds. It exists for the same reason the sandbox does — so the
@@ -347,6 +371,9 @@ volumes:
   codex-home:
   postgres-data:
   api-data:
+  # The `caddy` service's certificates and state (https profile only).
+  caddy-data:
+  caddy-config:
   gomodcache:
   gocache:
   # The `web-dev` dependencies: container-installed, kept across `dev-down`, and

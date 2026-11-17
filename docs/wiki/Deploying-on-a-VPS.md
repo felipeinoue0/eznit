@@ -13,11 +13,29 @@ and change its password without losing data.**
 
 | ✅ Safe any time | ⛔ Deletes data |
 | --- | --- |
-| `docker compose up -d --build` | `docker compose down -v` / `make docker_down_v` |
+| `docker compose up -d --build` / `make vps-update` | `docker compose down -v` / `make docker_down_v` |
 | `docker compose restart` / `stop` / `down` | `make dev-reset` |
 | rebuilding or recreating any container | `docker volume rm …` / `docker volume prune` |
 | a VPS reboot | `docker system prune --volumes` |
 | `make backup` | the window's **Settings → Reset** (its local folder) |
+
+## ⚡ The short version
+
+```sh
+# once
+git clone https://github.com/fiwon123/eznit.git /srv/eznit && cd /srv/eznit
+make vps-init DOMAIN=eznit.example.com
+docker compose up -d --build
+
+# day to day
+docker compose up -d          # start
+docker compose down           # stop; the data is kept (never add -v)
+
+# update
+make vps-update               # back up, then the newest release
+```
+
+The rest of this page explains what those commands do.
 
 ## 🧠 The one thing to understand: where the data lives
 
@@ -60,49 +78,92 @@ flowchart LR
 
 ## 🚀 First deploy
 
-On the VPS, with Docker and the Compose plugin installed:
+### 0️⃣ Prepare the server (once)
 
 ```sh
-git clone https://github.com/fiwon123/eznit.git /srv/eznit
-cd /srv/eznit
-git checkout v0.38.0            # a release tag, not a moving branch
-make setup                      # creates .env and secrets/db_password.txt
+curl -fsSL https://get.docker.com | sudo sh     # Docker + the Compose plugin
+sudo usermod -aG docker "$USER"                 # then log out and back in
+sudo apt install -y git make
+sudo ufw allow 22 && sudo ufw allow 80 && sudo ufw allow 443 && sudo ufw enable
 ```
 
-### 1️⃣ Set a strong database password, before the first start
+Point your domain's DNS **A record** at the server's address. Ports 80 and 443
+must be free: stop any web server the image came with (`sudo systemctl disable
+--now nginx apache2 caddy`).
 
-Put it in `secrets/db_password.txt` (`chmod 600`).
+### 1️⃣ Get the code and initialise it
+
+```sh
+sudo mkdir -p /srv/eznit && sudo chown "$USER" /srv/eznit
+git clone https://github.com/fiwon123/eznit.git /srv/eznit
+cd /srv/eznit
+make vps-init DOMAIN=eznit.example.com
+```
+
+`make vps-init` runs `make setup`, then:
+
+| Step | What it does |
+| --- | --- |
+| 🔑 **Password** | Replaces the example database password with a random one, **only while no database exists yet**. It never prints it: copy `secrets/db_password.txt` into your password manager. |
+| 🔒 **Private ports** | Sets `API_BIND=127.0.0.1` and `WEB_BIND=127.0.0.1` in `.env`, so only HTTPS is public. Docker's firewall rules bypass `ufw`, so the bind address is what keeps a port private. |
+| 🌐 **HTTPS** | Sets `DOMAIN` and `COMPOSE_PROFILES=https`, which turns on the `caddy` service. Caddy gets and renews the certificate by itself. |
+| 🛰️ **Client address** | Sets `TRUST_PROXY=true`, so the login rate limit counts each visitor, not the proxy. |
+
+Running it again is safe. It changes only the domain and what is not set yet.
 
 > [!CAUTION]
-> Postgres applies the password **only when it creates the volume**. Changing the
-> file later does not change the database. That is a separate procedure,
-> [below](#-changing-the-database-password).
+> Postgres applies the password **only when it creates the volume**. That is why
+> `vps-init` will not replace it once a database exists. Changing it later is a
+> separate procedure, [below](#-changing-the-database-password).
 
-### 2️⃣ Keep the ports off the internet
+### 2️⃣ Start it
 
-In `.env`:
+```sh
+docker compose up -d --build
+docker compose ps               # api "healthy", migrate "exited (0)", caddy "running"
+```
+
+`-d` keeps it running after you log out, and Docker starts it again after a reboot.
+Open `https://eznit.example.com`. The first visit can take a few seconds while
+Caddy fetches the certificate.
+
+```mermaid
+flowchart LR
+    U["👤 Browser / CLI"] -->|"HTTPS :443"| C["🔒 caddy"]
+    C -->|"web:80"| W["🌐 web (nginx)"]
+    W -->|"/v1"| A["⚙️ api :4000"]
+    A --> D[("🐘 db")]
+    classDef pub fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+    classDef priv fill:#dcfce7,stroke:#16a34a,color:#14532d
+    class U,C pub
+    class W,A,D priv
+```
+
+### 3️⃣ Create your account straight away
+
+> [!IMPORTANT]
+> **The first account to sign up becomes the instance's admin.** Sign up yourself
+> before you share the address.
+
+In the desktop window, open **Settings → Server**, type
+`https://eznit.example.com` and click **Connect**.
+
+<details>
+<summary>🛠️ Doing it by hand, or with your own reverse proxy</summary>
+
+`make vps-init` only writes these lines to `.env` and a random password to
+`secrets/db_password.txt` (mode `600`):
 
 ```sh
 API_BIND=127.0.0.1
 WEB_BIND=127.0.0.1
-TRUST_PROXY=true             # safe only because the API is on loopback
+TRUST_PROXY=true
+DOMAIN=eznit.example.com
+COMPOSE_PROFILES=https
 ```
 
-`DB_BIND` is already `127.0.0.1` by default. Docker's firewall rules bypass
-`ufw`, so the bind address, not the firewall, is what keeps a published port
-private.
-
-### 3️⃣ Start it in the background
-
-```sh
-docker compose up -d --build db migrate api web
-docker compose ps               # api "healthy", migrate "exited (0)"
-```
-
-### 4️⃣ Put HTTPS in front
-
-The `web` service already proxies `/v1` to the API, so one site is enough. With
-[Caddy](https://caddyserver.com/), which fetches the certificate itself:
+To keep a reverse proxy you already run on the host, leave out `DOMAIN` and
+`COMPOSE_PROFILES` and point it at `127.0.0.1:5173`. With Caddy:
 
 ```caddyfile
 eznit.example.com {
@@ -110,42 +171,48 @@ eznit.example.com {
 }
 ```
 
-```mermaid
-flowchart LR
-    U["👤 Browser / CLI"] -->|"HTTPS :443"| C["🔒 Caddy"]
-    C -->|"127.0.0.1:5173"| W["🌐 web (nginx)"]
-    W -->|"/v1"| A["⚙️ api :4000"]
-    A --> D[("🐘 db<br/>127.0.0.1:5432")]
-    classDef pub fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
-    classDef priv fill:#dcfce7,stroke:#16a34a,color:#14532d
-    class U,C pub
-    class W,A,D priv
-```
-
-### 5️⃣ Create your account straight away
-
-> [!IMPORTANT]
-> **The first account to sign up becomes the instance's admin.** Sign up yourself
-> before you share the address.
+</details>
 
 ## 🔄 Updating without touching the data
 
 ```sh
 cd /srv/eznit
-make backup                     # always: it turns any mistake into a restore
-git fetch --tags && git checkout v0.38.1
-docker compose up -d --build db migrate api web
+make vps-update                 # the newest release
+make vps-update TAG=v0.39.0     # or a specific one
 ```
 
-`up -d --build` rebuilds the images and recreates only the containers that changed.
-The volumes are kept. `migrate` applies only the migrations the database does not
-have yet. Migrations are **append-only**, so an update adds to the schema and never
-rewrites what is there.
+```mermaid
+flowchart LR
+    A["▶️ Start the current version"] --> B["💾 make backup"]
+    B --> C["🏷️ Check out the release tag"]
+    C --> D["🔁 docker compose up -d --build<br/>(migrate adds what is new)"]
+    B -.->|"fails"| X["⛔ Stop: nothing changed"]
+    classDef step fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+    classDef stop fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+    class A,B,C,D step
+    class X stop
+```
+
+The containers are rebuilt and the volumes are kept. `migrate` applies only the
+migrations the database does not have yet. Migrations are **append-only**, so an
+update adds to the schema and never rewrites what is there. Expect a few seconds
+of downtime.
+
+`vps-update` refuses to run when:
+
+- tracked files have local changes, because the checkout would overwrite them;
+- the backup fails;
+- the release is **older** than the one running (see the warning below).
+
+> [!NOTE]
+> The server runs a **release tag**, not a branch, so `git pull` does not apply
+> there: `git status` says "HEAD detached at v0.39.0", which is expected.
+> `vps-update` does the fetch and the checkout.
 
 > [!WARNING]
 > **Never run a down migration on a deployment you care about.** A down migration
-> drops columns and tables. To go back to an older release, restore the backup you
-> took before the update.
+> drops columns and tables. To go back to an older release, restore the backup
+> `vps-update` took before the update.
 
 ## 💾 Backups
 
