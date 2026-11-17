@@ -1,14 +1,33 @@
+<sub>🏠 [Home](https://github.com/fiwon123/eznit/wiki) › 🧩 Templates and skills</sub>
+
 # 🧩 Templates and skills
 
-A **template** is a folder you keep once and write onto other machines: agent
-instructions, editor rules, skills, scripts, project scaffolding. Publishing it
-makes one copy the source of truth; applying it is the setup step.
+**A template is a folder you keep once and write onto other machines.** It can
+hold agent instructions, editor rules, skills, scripts or project scaffolding.
+Publishing it makes one copy the source of truth, and applying it is the setup
+step.
 
-You do not need a template to start: `eznit template init` writes a built-in
-starter offline, for an AI terminal or for a shell (`--kind bash` writes
-`shell/bashrc.sh`, and so on for zsh, fish and PowerShell). Publishing and
-applying through the API need a running eznit instance; an **offline bundle**
-needs neither (see [Take it with you](#-take-it-with-you-no-server)).
+```mermaid
+flowchart LR
+    A["📁 A folder<br/>on your machine"] -->|"template publish"| B["🗄️ Catalogue<br/>on your server"]
+    S["✨ template init<br/>(offline starter)"] --> A
+    B -->|"template apply ‹id›"| C["📁 Another project<br/>variables asked here"]
+    B -->|"template export"| D["📦 setup.eznit<br/>one JSON file"]
+    D -->|"apply from file<br/>(no server)"| C
+
+    classDef f fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+    classDef s fill:#dcfce7,stroke:#16a34a,color:#14532d
+    classDef b fill:#f3e8ff,stroke:#9333ea,color:#581c87
+    class A,C,S f
+    class B s
+    class D b
+```
+
+| Without a server | With a server |
+| --- | --- |
+| ✨ `template init` writes a built-in starter | 📤 `template publish` adds a folder to the catalogue |
+| 📦 `template apply --from-file` writes an exported bundle | 📥 `template apply <id>` writes it anywhere |
+| | 🖥️ the window's **Explore** and **Workspace** browse, preview, apply and publish |
 
 ## 🗂️ What goes in a template
 
@@ -16,14 +35,12 @@ Any file, in any folder shape. These are the ones people actually keep:
 
 | What | Example paths |
 | --- | --- |
-| Agent instructions | `AGENTS.md`, `CLAUDE.md` |
-| opencode agents and skills | `.opencode/agents/build.md`, `.opencode/skills/deploy/SKILL.md` |
-| Editor rules | `.cursor/rules/project.mdc`, `.windsurf/rules/project.md`, `.github/copilot-instructions.md` |
-| Shell configuration | `shell/zshrc.sh`, `shell/profile.ps1` |
-| Project files | `Makefile`, `.editorconfig`, `.gitignore`, `docker-compose.yml` |
-| Binary helpers | an image, a compiled script, a font — anything non-text |
-
-A worked folder:
+| 🤖 Agent instructions | `AGENTS.md`, `CLAUDE.md` |
+| 🧠 opencode agents and skills | `.opencode/agents/build.md`, `.opencode/skills/deploy/SKILL.md` |
+| ✏️ Editor rules | `.cursor/rules/project.mdc`, `.windsurf/rules/project.md`, `.github/copilot-instructions.md` |
+| 🐚 Shell configuration | `shell/zshrc.sh`, `shell/profile.ps1` |
+| 🧰 Project files | `Makefile`, `.editorconfig`, `.gitignore`, `docker-compose.yml` |
+| 🖼️ Binary helpers | an image, a compiled tool, a font: anything non-text |
 
 ```text
 my-setup/
@@ -35,68 +52,65 @@ my-setup/
 └── shell/zshrc.sh
 ```
 
-Files are written relative to the target folder; `..` and absolute paths are
-refused. A file marked executable is written with mode `0755` when applied.
+> [!NOTE]
+> Files are written **relative to the target folder**, so `..` and absolute paths
+> are refused. A file marked executable is written with mode `0755`.
 
-## 🤔 A shared file is not a template
+### ✨ The built-in starters
 
-A shared file and a template are different things, and sharing does not turn a
-file into a template:
+`eznit template init --kind <kind> --target <dir>` writes one offline, with no server
+and no account:
 
-| | Sharing a file | Publishing a template |
-| --- | --- | --- |
-| Covers | one file | a whole folder |
-| How | **Visibility → Public** on the file's page in Workspace, or `eznit share` | **Publish template…** in Workspace, **New template** on the web page, or `eznit template publish ./folder` |
-| Does | makes that one file downloadable by anyone on the instance | adds the folder to the catalogue with a name, a kind and its `{{variables}}` |
-| In the catalogue | no — listed as a file on the **Explore** tab (and the web page's Explore), visible without an account | yes |
-
-So a shared file is never listed as a template — the window's Templates / Files
-filter keeps them apart — and no kind filter can make it one: the filter lists **template kinds** (`opencode`, `codex`,
-`copilot`, `cursor`, `windsurf`, `generic`, `bash`, `zsh`, `fish`,
-`powershell`), and **All kinds** means "no filter". It is not a list of your
-files.
-
-To publish one from the window, press **Publish template…** in Workspace,
-pick the folder, and fill in the form: name (the folder's by default), kind,
-a description (a few lines, scrolling past them), Visibility (Private by
-default), and a default for each `{{PLACEHOLDER}}` the files use (an
-empty default makes it a question asked on every apply). It uses the same
-folder walk as the CLI, so `.git`, `node_modules` and the like are left out,
-and a file that is too big is named. The button is in Workspace, so it needs a
-session.
-
-From a terminal, point the command at the folder and answer its prompts:
-
-```sh
-eznit template init --kind opencode --target ./demo   # a starter, no server needed
-eznit login
-eznit template publish ./demo --public
-```
-
-A template you own changes visibility from its page in Workspace — the
-**Visibility** dropdown, after a confirmation. Its **Files** tab shows the
-folder it writes as a tree, with a preview of the selected file.
-
-Then press **Refresh** on the window's Explore tab (or Workspace, for a private
-one). The window browses, shows, exports, applies and publishes templates.
+| Kind | Writes |
+| --- | --- |
+| `opencode` | `AGENTS.md`, `.opencode/agents/build.md`, `plan.md`, `reviewer.md` |
+| `copilot` | `AGENTS.md`, `.github/copilot-instructions.md` |
+| `cursor` | `AGENTS.md`, `.cursor/rules/project.mdc` |
+| `windsurf` | `AGENTS.md`, `.windsurf/rules/project.md` |
+| `codex`, `generic` | `AGENTS.md` |
+| `bash` · `zsh` · `fish` · `powershell` | `shell/bashrc.sh` · `shell/zshrc.sh` · `shell/config.fish` · `shell/profile.ps1` |
 
 ## 📤 Publish, list, show, apply
 
 ```sh
-eznit template publish ./my-setup      # prompts name, kind, description, public?
+eznit template publish ./my-setup      # asks name, kind, description, public?
 eznit template publish ./my-setup --public --commands <id>=shell/zshrc.sh
-eznit template list                    # public catalogue + your own
+eznit template list                    # the public catalogue + your own
 eznit template list --mine --kind opencode
-eznit template show <id>               # the files and the variables
+eznit template show <id>               # its files and its variables
 eznit template apply <id> --target ../other-project [--force]
 ```
 
-`publish` reads every file in the folder, skipping symlinks and files over the
-limits. `--force` on `apply` overwrites files that already exist; without it, an
-existing file stops the apply before anything is written.
+- `publish` reads every file in the folder. It skips symlinks, `.git`,
+  `node_modules` and the like, and names any file over the limits.
+- `apply` **checks every file before writing any**. An existing file stops it
+  unless you pass `--force`.
+- A **public** template applies without a session. Your private ones need
+  `eznit login`.
 
-Only a public template can be applied without a session. Your own private
-templates need `eznit login`.
+### 🖥️ From the window
+
+| Where | What you can do |
+| --- | --- |
+| **Explore** | Browse public templates and shared files with a Templates / Files / All filter. Open one to see its files as a tree with a preview, then **Apply…** or **Download**. |
+| **Workspace** *(signed in)* | Your own files and templates. **Upload file…**, **Publish template…**, and switch an item's **Visibility** after a confirmation. |
+
+**Publish template…** opens the folder in your system's file dialog and shows a
+form: name (the folder's by default), kind, description, visibility (Private by
+default), and a default for each `{{PLACEHOLDER}}`. It walks the folder the same
+way the CLI does.
+
+## 🤔 A shared file is not a template
+
+| | 📄 Sharing a file | 🧩 Publishing a template |
+| --- | --- | --- |
+| **Covers** | one file | a whole folder |
+| **How** | **Visibility → Public** on the file's page, or `eznit share` | **Publish template…**, **New template** on the web, or `eznit template publish` |
+| **Result** | anyone on the instance can download that file | the folder joins the catalogue with a name, a kind and its `{{variables}}` |
+| **Listed in** | Explore, as a *file* (no account needed) | the template catalogue |
+
+The kind filter lists **template kinds** (`opencode` … `powershell`). **All kinds**
+means "no filter". It is not a list of your files.
 
 ## 🔤 Variables
 
@@ -108,20 +122,22 @@ Write a placeholder in any text file and it becomes a variable:
 {{PROJECT_DESCRIPTION}}
 ```
 
-On `publish`, each distinct placeholder is asked once for a **default value**.
-An empty default makes the variable required: `apply` will ask for it.
+| When | What happens |
+| --- | --- |
+| **publish** | each distinct placeholder is asked once for a **default**. An empty default makes it **required**. |
+| **apply** | the values are asked on the writing machine and substituted into text files. Binary files are copied byte for byte. |
+| **undeclared** | a placeholder the template does not declare is left alone and **reported**. |
 
-On `apply`, the values are asked on the machine that writes the files and
-substituted into text files. A binary file is copied byte for byte. A
-placeholder the template does not declare is left alone and reported, so you can
-see it.
+Names are upper case (`PROJECT_NAME`), up to 50 per template.
 
-Variable names are upper case (`PROJECT_NAME`), up to 50 per template.
+> [!TIP]
+> Variable values are **never stored on the server**. They exist only where the
+> files are written.
 
 ## ⚙️ Commands pulled in by id
 
-A command is a script kept once in your library and referenced by templates, so
-updating it updates every template that pulls it in.
+A command is a script kept once in your library and referenced by templates.
+Updating it updates every template that pulls it in.
 
 ```sh
 eznit command add scripts/fmt.sh --name fmt      # keep it once
@@ -130,61 +146,59 @@ eznit template publish . --commands <command-id>=bin/fmt
 eznit command remove fmt                          # refused while a template uses it
 ```
 
-A command name is unique per user, not globally. `command remove` answers
-`409` while a template still references it — a published template does not
-quietly lose a script.
+A name is unique per user. `command remove` answers `409` while a template still
+references the command, so a published template never quietly loses a script.
 
-The library round-trips through a crower pack
-([CLI Reference](https://github.com/fiwon123/eznit/wiki/CLI-Reference#-commands-library)),
-for moving the same commands to a workflow manager that already uses
-[crower](https://github.com/fiwon123/crower).
+🔁 The library also round-trips through a [crower](https://github.com/fiwon123/crower)
+TOML pack: `eznit command export --crower pack.toml` and
+`eznit command import --crower pack.toml`. The mapping is in the
+[CLI Reference](https://github.com/fiwon123/eznit/wiki/CLI-Reference#-commands-library).
 
 ## 📦 Take it with you (no server)
 
-A template can leave the server as one file, and come back out on a machine that
-has never seen eznit:
-
 ```sh
-eznit template export <id> -o setup.eznit     # needs a session for a private template
+eznit template export <id> -o setup.eznit     # a private template needs a session
 eznit template apply --from-file setup.eznit --target ../another-project
 ```
 
-The bundle is JSON (`format: 1`) holding the files — text and binary — and the
-variables with their prompts and defaults. A command the template pulls in is
-written at its target path, so the bundle is a snapshot to apply, not a publish
-request. The same path rules and limits are checked when it is read; a bundle
-cannot be a way around them. `apply --from-file` asks the variables locally, so
-no answer leaves the machine.
-
-`export` refuses to overwrite an existing file without `--force`.
+- The bundle is JSON (`format: 1`) holding the files, text and binary, and the
+  variables with their prompts and defaults.
+- A command the template pulls in is written at its target path, so the bundle is
+  a **snapshot to apply**, not a publish request.
+- The same path rules and limits are checked when it is read, so a bundle cannot
+  be used to get around them.
+- `export` refuses to overwrite an existing file without `--force`.
 
 ## 🧮 Limits
 
-Checked by the CLI before the upload and by the server on the request:
+Checked by the CLI before the upload **and** by the server on the request:
 
 | Thing | Limit |
+| --- | ---: |
+| Files per template | **200** |
+| Text file | **256 KiB** |
+| Text across the template | **4 MiB** |
+| Binary file | **10 MiB** |
+| Binary across the template | **32 MiB** |
+| Variables | **50** |
+| Commands per template | **50** |
+
+## 🔒 What never travels
+
+| | Stays |
 | --- | --- |
-| Files per template | 200 |
-| Text file | 256 KiB |
-| Text across the template | 4 MiB |
-| Binary file | 10 MiB |
-| Binary across the template | 32 MiB |
-| Variables | 50 |
-| Commands per template | 50 |
+| 🔤 Variable values | on the machine that writes the files |
+| 🔑 Your git-host token | in `~/.eznit/config.json` on your machine |
 
-## 🔒 What does not travel
+> [!NOTE]
+> **Not available yet:** device-to-device transfer over cthrone. See
+> [Direction](https://github.com/fiwon123/eznit/wiki/Direction). Until then, an
+> offline bundle is how to share without a shared instance.
 
-- **Variable values.** They are asked where the files are written, never stored
-  on the server.
-- **Your git token.** It stays in `~/.eznit/config.json` on your machine.
+## 👉 Next
 
-## 🚧 Not available yet
-
-- **Crower packs** — move a command library between eznit and
-  [crower](https://github.com/fiwon123/crower)
-  ([#185](https://github.com/fiwon123/eznit/issues/185)).
-- **Device-to-device transfer** over cthrone. See
-  [Direction](https://github.com/fiwon123/eznit/wiki/Direction).
-
-An offline bundle is how sharing works today without a shared instance:
-`template export` and `apply --from-file`, above.
+| | |
+| --- | --- |
+| 💻 [CLI Reference](https://github.com/fiwon123/eznit/wiki/CLI-Reference#-templates) | every template flag |
+| 🐚 [Platforms and shells](https://github.com/fiwon123/eznit/wiki/Platforms-and-Shells) | what survives a Linux ↔ Windows round trip |
+| 🧯 [Troubleshooting](https://github.com/fiwon123/eznit/wiki/Troubleshooting#-templates) | apply stops, publish skips a file, 401 |
