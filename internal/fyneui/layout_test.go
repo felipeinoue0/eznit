@@ -9,6 +9,7 @@ import (
 
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
+	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/fiwon123/eznit/internal/apiclient"
@@ -53,6 +54,12 @@ func walkTree(object fyne.CanvasObject, offset fyne.Position, visit func(fyne.Ca
 	case *widget.Card:
 		// A card's content is this window's own object; its renderer only adds
 		// the background and the padding around it.
+		if typed.Content != nil {
+			walkTree(typed.Content, pos, visit)
+		}
+	case *container.Scroll:
+		// A scroll's content is this window's own object too: a page body
+		// that scrolls is still text that can overlap.
 		if typed.Content != nil {
 			walkTree(typed.Content, pos, visit)
 		}
@@ -263,26 +270,34 @@ func assertDotCentredOn(t *testing.T, root fyne.CanvasObject, dot, message fyne.
 	}
 }
 
-// TestFilesTabTextDoesNotOverlap is the file library at its widest content: a
-// file name long enough to wrap, a long error under the table and a long name
-// in the header.
-func TestFilesTabTextDoesNotOverlap(t *testing.T) {
+// TestAccountTabTextDoesNotOverlap is My Account at its widest content: a file
+// name long enough to wrap on its page, a long error at the bottom and a long
+// address in the header — on the list and on the file's page.
+func TestAccountTabTextDoesNotOverlap(t *testing.T) {
 	for _, size := range windowSizes() {
 		t.Run(fmt.Sprintf("%.0fx%.0f", size.Width, size.Height), func(t *testing.T) {
-			view := newTestFilesView(t, apiChoice{
+			view := newTestAccountView(t, apiChoice{
 				url:    "http://a-very-long-server-name.example.com:4000",
 				source: "the address you entered on another machine",
 			})
 
-			view.files = []apiclient.File{{
+			file := apiclient.File{
 				ID:      "6b1f0e1a",
-				Name:    "a-file-with-a-name-long-enough-to-need-a-second-line.txt",
+				Name:    "a-file-with-a-name-long-enough-to-need-a-second-line",
+				Ext:     "txt",
 				Version: 12,
-			}}
-			view.selected = 0
+			}
+			view.files = []apiclient.File{file}
 			view.ready = true
+			view.fill()
 			view.updateActions()
 			view.setStatus("The upload failed: the server at http://a-very-long-server-name.example.com:4000 answered 413 — the file is larger than this instance accepts.", statusError)
+
+			layOut(view.ui.window, size)
+			assertNoTextOverlap(t, view.ui.window.Content())
+			assertTextFits(t, view.ui.window.Content())
+
+			view.openFile(file)
 
 			layOut(view.ui.window, size)
 			assertNoTextOverlap(t, view.ui.window.Content())
@@ -291,29 +306,65 @@ func TestFilesTabTextDoesNotOverlap(t *testing.T) {
 	}
 }
 
-// TestTemplatesTabTextDoesNotOverlap covers the catalogue: a description that
-// wraps, a long error line and the header's address.
-func TestTemplatesTabTextDoesNotOverlap(t *testing.T) {
+// TestWebTabTextDoesNotOverlap covers a template's page on the Web tab: a
+// description that wraps, a long error line and the header's address.
+func TestWebTabTextDoesNotOverlap(t *testing.T) {
 	for _, size := range windowSizes() {
 		t.Run(fmt.Sprintf("%.0fx%.0f", size.Width, size.Height), func(t *testing.T) {
-			view := newTestTemplatesView(t, apiChoice{
+			u := newTestUI(t)
+			u.local = false
+			u.address = apiChoice{
 				url:    "http://a-very-long-server-name.example.com:4000",
 				source: "the address you entered on another machine",
-			})
+			}
+			u.web.bar.sync()
 
 			detail := sampleDetail(t)
 			detail.Description = strings.Repeat("A description long enough that it has to wrap at every supported window size. ", 4)
 
-			view.items = []templates.TemplateData{detail.TemplateData}
-			view.table.Refresh()
-			view.showDetail(detail)
-			view.updateActions()
-			view.setStatus("Cannot load the catalogue from http://a-very-long-server-name.example.com:4000 — the server did not answer, or that address is not an eznit instance.", statusError)
+			u.web.templates = []templates.TemplateData{detail.TemplateData}
+			u.web.fill()
+			u.web.setStatus("Cannot load what is public on http://a-very-long-server-name.example.com:4000 — the server did not answer, or that address is not an eznit instance.", statusError)
 
-			layOut(view.ui.window, size)
-			assertNoTextOverlap(t, view.ui.window.Content())
-			assertTextFits(t, view.ui.window.Content())
+			layOut(u.window, size)
+			assertNoTextOverlap(t, u.window.Content())
+			assertTextFits(t, u.window.Content())
+
+			page := newTemplatePage(u, u.web.setStatus)
+			u.web.pages.push(page.content(detail.Name, u.web.pages.back))
+			page.show(detail)
+
+			layOut(u.window, size)
+			assertNoTextOverlap(t, u.window.Content())
+			assertTextFits(t, u.window.Content())
 		})
+	}
+}
+
+// TestEntryRowTextDoesNotOverlap: a row's name and info end in an ellipsis
+// rather than run under its Download button. A label that does not truncate
+// asks for the width of its whole text, so the measure is the row's minimum: it
+// must not grow with the name, or one long file name widens the window.
+func TestEntryRowTextDoesNotOverlap(t *testing.T) {
+	_ = newTestUI(t)
+
+	short := newEntryRow()
+	short.set(entry{kind: entryFile, name: "a.txt", info: "File · version 1 · private"}, func() {})
+
+	long := newEntryRow()
+	long.set(entry{
+		kind: entryFile,
+		name: strings.Repeat("a-very-long-file-name-", 8) + ".txt",
+		info: "File · version 12 · shared by " + strings.Repeat("someone-with-a-long-address", 4) + "@example.com",
+	}, func() {})
+
+	if got, want := long.MinSize().Width, short.MinSize().Width; got > want+0.5 {
+		t.Errorf("a long name makes the row ask for %.0f px, a short one %.0f: the text is not truncated", got, want)
+	}
+
+	for _, width := range []float32{320, 640} {
+		long.Resize(fyne.NewSize(width, long.MinSize().Height))
+		assertNoTextOverlap(t, test.WidgetRenderer(long).Objects()[0])
 	}
 }
 
@@ -383,20 +434,21 @@ func TestServerConfigurationTextDoesNotOverlap(t *testing.T) {
 func TestStatusDotsAreCentred(t *testing.T) {
 	size := fyne.NewSize(980, 640)
 
-	t.Run("files", func(t *testing.T) {
-		view := newTestFilesView(t, apiChoice{url: "http://127.0.0.1:4000", source: "the default"})
+	t.Run("account", func(t *testing.T) {
+		view := newTestAccountView(t, apiChoice{url: "http://127.0.0.1:4000", source: "the default"})
 		view.setStatus("3 file(s) on http://127.0.0.1:4000.", statusOK)
 		layOut(view.ui.window, size)
 
 		assertDotCentredOn(t, view.ui.window.Content(), view.dot, view.status)
 	})
 
-	t.Run("templates", func(t *testing.T) {
-		view := newTestTemplatesView(t, apiChoice{url: "http://127.0.0.1:4000", source: "the default"})
-		view.setStatus("4 template(s) on http://127.0.0.1:4000.", statusOK)
-		layOut(view.ui.window, size)
+	t.Run("web", func(t *testing.T) {
+		u := newTestUI(t)
+		u.window.SetContent(u.web.built)
+		u.web.setStatus("4 template(s) on http://127.0.0.1:4000.", statusOK)
+		layOut(u.window, size)
 
-		assertDotCentredOn(t, view.ui.window.Content(), view.dot, view.status)
+		assertDotCentredOn(t, u.window.Content(), u.web.dot, u.web.status)
 	})
 
 	t.Run("server", func(t *testing.T) {

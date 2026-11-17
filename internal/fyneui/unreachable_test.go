@@ -21,7 +21,7 @@ func TestUnreachablePanelNamesTheAddress(t *testing.T) {
 	address := "http://127.0.0.1:4321"
 	u.showUnreachable(address, fmt.Errorf("%w: dial tcp %s: connect: connection refused", apiclient.ErrUnreachable, address))
 
-	content := u.tabs.Items[0].Content
+	content := u.accountTab.Content
 
 	if findLabel(content, "Cannot reach this server") == nil {
 		t.Error("the panel has no headline")
@@ -67,7 +67,7 @@ func TestUnreachablePanelNamesAnUnexpectedAnswer(t *testing.T) {
 
 			u.showUnreachable("http://127.0.0.1:4321", &apiclient.APIError{Status: tt.status})
 
-			if got := panelText(u.tabs.Items[0].Content); !strings.Contains(got, tt.want) {
+			if got := panelText(u.accountTab.Content); !strings.Contains(got, tt.want) {
 				t.Errorf("the panel says %q, want %q", got, tt.want)
 			}
 		})
@@ -82,13 +82,13 @@ func TestUnreachablePanelAnswersTheAddressBar(t *testing.T) {
 
 	u.showUnreachable("http://127.0.0.1:4321", fmt.Errorf("%w: no route to host", apiclient.ErrUnreachable))
 
-	content := u.tabs.Items[0].Content
+	content := u.accountTab.Content
 
-	if !holds(content, u.files.bar.entry) {
+	if !holds(content, u.account.bar.entry) {
 		t.Fatal("the panel's address bar is not on screen")
 	}
 
-	u.files.bar.message("No answer from http://127.0.0.1:4321", statusError)
+	u.account.bar.message("No answer from http://127.0.0.1:4321", statusError)
 
 	if got := panelText(content); !strings.Contains(got, "No answer from http://127.0.0.1:4321") {
 		t.Errorf("the panel says %q, want the bar's answer", got)

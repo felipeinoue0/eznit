@@ -25,7 +25,7 @@ import (
 	"github.com/fiwon123/eznit/internal/serverctl"
 )
 
-// newTestServerView builds the Server tab against a test app. Nothing is
+// newTestServerView builds the Local server tab against a test app. Nothing is
 // started: these tests cover what the form reads and writes.
 func newTestServerView(t *testing.T, dir string) *serverView {
 	t.Helper()
@@ -55,7 +55,7 @@ func newTestServerViewIn(t *testing.T, dir, store string) *serverView {
 	view := newServerView(u, dir)
 
 	// Run wires the panel back into the window; a test that leaves it out would
-	// not see the address the Server tab's configuration names.
+	// not see the address the Local server tab's configuration names.
 	view.ui.server = view
 
 	// Lay the tab out as the window would: a test that only builds it cannot
@@ -305,7 +305,7 @@ func TestServerViewSaysWhenTheFolderIsNotABundle(t *testing.T) {
 		t.Error("Create .env is offered although there is no example to copy")
 	}
 
-	for _, want := range []string{"not a server bundle", serverctl.BinaryName(), "release archive", "Files tab"} {
+	for _, want := range []string{"not a server bundle", serverctl.BinaryName(), "release archive", "My Account"} {
 		if !strings.Contains(view.note.Text, want) {
 			t.Errorf("note = %q, want it to mention %q", view.note.Text, want)
 		}
@@ -940,7 +940,7 @@ func TestOutputSnapshotIsSelectable(t *testing.T) {
 	}
 }
 
-// newLogView is a Server tab that has printed the given lines and been laid
+// newLogView is a Local server tab that has printed the given lines and been laid
 // out: a grid that was never laid out has no cell size, so every pointer
 // position would map to cell (0,0).
 func newLogView(t *testing.T, messages ...string) *serverView {

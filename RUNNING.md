@@ -50,10 +50,10 @@ folder as a child process, shows its log, and edits the `.env` and the database
 password the server reads:
 
 ```sh
-./eznit-gui        # then: Server tab → Start
+./eznit-gui        # then: Local server tab → Start
 ```
 
-Run it from **this** folder: the Server tab looks for `eznit` beside the window,
+Run it from **this** folder: the Local server tab looks for `eznit` beside the window,
 so a window copied somewhere else (or started from another folder) has no server
 to run and will say so. A folder from an older release still holds
 `eznit-server`; it is used when `eznit` is absent, so an archive you already
@@ -119,16 +119,16 @@ always shows which. Its header is an address bar, and the **Templates** tab has
 the same one:
 
 - **Use this machine** is the default and is remembered: checked, the field
-  shows the server the Server tab would run, on the port that folder's
+  shows the server the Local server tab would run, on the port that folder's
   configuration names, and is shut; unchecked, the field takes any address.
 - **Connect** validates the address and switches to it, remembering it. It is
-  not a login: with no session in the window the Files tab keeps its login card,
+  not a login: with no session in the window My Account keeps its login card,
   whatever address was connected to.
 - **Test** asks the address `/v1/healthcheck` without saving it.
 - The source line under the checkbox names where the address came from: this
   machine, `-api`, `GUI_API_URL`, or an address you typed.
 
-The Server tab's folder is an editable field too: type a bundle folder and press
+The Local server tab's folder is an editable field too: type a bundle folder and press
 **Use** (or Enter), or pick one with **Browse…**. **Reset** returns to the folder
 the window was installed in, after asking.
 

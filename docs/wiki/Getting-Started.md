@@ -109,7 +109,7 @@ the source-checkout path — in a bundle it would try to build an image the
 archive does not contain.
 
 The bundle also carries `eznit-gui`. Run it **from inside the extracted folder** —
-the Server tab looks for `eznit` beside the window (an archive from before the
+the Local server tab looks for `eznit` beside the window (an archive from before the
 two binaries were merged still has `eznit-server`, and that works too). The first
 run is:
 

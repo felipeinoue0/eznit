@@ -10,17 +10,16 @@ import (
 	"strings"
 	"testing"
 
-	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
-	"fyne.io/fyne/v2/widget"
 
 	"github.com/fiwon123/eznit/internal/apiclient"
 	"github.com/fiwon123/eznit/internal/config"
+	"github.com/fiwon123/eznit/internal/domain/templates"
 )
 
-// newTestFilesView builds the Files tab for an address. Nothing is contacted:
+// newTestAccountView builds My Account for an address. Nothing is contacted:
 // these tests cover what the tab says and what it allows.
-func newTestFilesView(t *testing.T, address apiChoice) *filesView {
+func newTestAccountView(t *testing.T, address apiChoice) *accountView {
 	t.Helper()
 
 	t.Setenv(config.Env, filepath.Join(t.TempDir(), "config.json"))
@@ -35,20 +34,20 @@ func newTestFilesView(t *testing.T, address apiChoice) *filesView {
 		client:  apiclient.New(address.url),
 	}
 
-	u.files = newFilesView(u)
-	u.window.SetContent(u.files.content())
+	u.account = newAccountView(u)
+	u.window.SetContent(u.account.content())
 
 	// A bar's Test and a listing run on the window's tally: wait for them
 	// before the driver goes away (#333).
 	t.Cleanup(u.settle)
 
-	return u.files
+	return u.account
 }
 
 // The tab says which server it talks to, and why that address: an address that
 // came from an environment variable must not look like one a person saved.
-func TestFilesHeaderNamesTheServerAndItsSource(t *testing.T) {
-	view := newTestFilesView(t, apiChoice{url: "http://127.0.0.1:4321", source: "the local server"})
+func TestAccountHeaderNamesTheServerAndItsSource(t *testing.T) {
+	view := newTestAccountView(t, apiChoice{url: "http://127.0.0.1:4321", source: "the local server"})
 
 	if got := view.bar.entry.Text; got != "http://127.0.0.1:4321" {
 		t.Errorf("address = %q, want the resolved URL", got)
@@ -64,25 +63,22 @@ func TestFilesHeaderNamesTheServerAndItsSource(t *testing.T) {
 	}
 }
 
-// Nothing that acts on the server may work before it has answered once: a
-// wrong address must not look like an empty library.
-func TestFilesActionsWaitForTheServer(t *testing.T) {
-	view := newTestFilesView(t, apiChoice{url: "http://127.0.0.1:4321", source: "the default"})
-
-	view.files = []apiclient.File{{ID: "1", Name: "notes.txt", Version: 1}}
-	view.selected = 0
+// Nothing that adds to the account may work before the server has answered
+// once: a wrong address must not look like an empty account.
+func TestAccountActionsWaitForTheServer(t *testing.T) {
+	view := newTestAccountView(t, apiChoice{url: "http://127.0.0.1:4321", source: "the default"})
 
 	view.ready = false
 	view.updateActions()
 
-	if !view.upload.Disabled() || !view.download.Disabled() || !view.remove.Disabled() || !view.share.Disabled() {
+	if !view.upload.Disabled() || !view.publish.Disabled() {
 		t.Error("an action is enabled before the server has answered")
 	}
 
 	view.ready = true
 	view.updateActions()
 
-	if view.upload.Disabled() || view.download.Disabled() || view.remove.Disabled() || view.share.Disabled() {
+	if view.upload.Disabled() || view.publish.Disabled() {
 		t.Error("an action is still disabled after a successful listing")
 	}
 }
@@ -97,9 +93,9 @@ func TestRefusedSessionReturnsToLogin(t *testing.T) {
 	}
 	u.client.Token = "dead-token"
 
-	library := u.tabs.Items[0].Content
+	library := u.accountTab.Content
 
-	u.files.failedToLoad("https://eznit.example.com", &apiclient.APIError{Status: 401, Message: "Invalid token"})
+	u.account.failedToLoad("https://eznit.example.com", &apiclient.APIError{Status: 401, Message: "Invalid token"})
 
 	if _, err := config.Value("token"); err == nil {
 		t.Error("the refused token is still in the config file")
@@ -107,10 +103,10 @@ func TestRefusedSessionReturnsToLogin(t *testing.T) {
 	if u.client.Token != "" {
 		t.Errorf("client token = %q, want it cleared", u.client.Token)
 	}
-	if findButton(u.tabs.Items[0].Content, "Log in") == nil {
-		t.Error("the Files tab does not offer to sign in again")
+	if findButton(u.accountTab.Content, "Log in") == nil {
+		t.Error("My Account does not offer to sign in again")
 	}
-	if u.tabs.Items[0].Content == library {
+	if u.accountTab.Content == library {
 		t.Error("the library is still on screen after the session ended")
 	}
 }
@@ -134,14 +130,14 @@ func TestRefusedListingGoesToLogin(t *testing.T) {
 	u.client = apiclient.New(server.URL)
 	u.client.Token = "dead-token"
 
-	u.files.refresh()
+	u.account.reload()
 
 	// Wait for the answer instead of polling the tree: the poll reads widgets
 	// the worker writes (the test driver runs fyne.Do inline), which was one of
 	// the races #333 recorded.
 	u.settle()
 
-	if findButton(u.tabs.Items[0].Content, "Log in") == nil {
+	if findButton(u.accountTab.Content, "Log in") == nil {
 		t.Fatal("a refused listing did not bring the login card back")
 	}
 
@@ -160,7 +156,7 @@ func TestUnreachableServerKeepsTheSession(t *testing.T) {
 	}
 	u.client.Token = "live-token"
 
-	u.files.failedToLoad("http://127.0.0.1:4321",
+	u.account.failedToLoad("http://127.0.0.1:4321",
 		fmt.Errorf("%w: dial tcp 127.0.0.1:4321: connect: connection refused", apiclient.ErrUnreachable))
 
 	if stored, err := config.Value("token"); err != nil || stored != "live-token" {
@@ -170,14 +166,14 @@ func TestUnreachableServerKeepsTheSession(t *testing.T) {
 		t.Errorf("client token = %q, want it kept", u.client.Token)
 	}
 
-	content := u.tabs.Items[0].Content
+	content := u.accountTab.Content
 	if findButton(content, "Try again") == nil {
 		t.Error("the not-connected panel has no Try again")
 	}
 
 	// The bar the panel shows is the one a later sync writes to, and it is in
 	// the tree: a detached bar would swallow every address typed into it.
-	if !holds(content, u.files.bar.entry) {
+	if !holds(content, u.account.bar.entry) {
 		t.Error("the panel's address bar is not the one on screen")
 	}
 
@@ -185,126 +181,136 @@ func TestUnreachableServerKeepsTheSession(t *testing.T) {
 	u.address = apiChoice{url: "http://127.0.0.1:9999", source: "the address you entered"}
 	u.syncAddressBars()
 
-	if got := u.files.bar.entry.Text; got != "http://127.0.0.1:9999" {
+	if got := u.account.bar.entry.Text; got != "http://127.0.0.1:9999" {
 		t.Errorf("the tab's address bar shows %q, want the current address", got)
 	}
 }
 
-// The table's cells are selectable — a selectable cell would take the tap that
-// selects the row, so each cell carries a tap layer above its label. A tap
-// still selects the row, and the selected row is described under the table so
-// both copies work from one line.
-func TestSelectedFileIsDescribedAndCopied(t *testing.T) {
-	view := newTestFilesView(t, apiChoice{url: "http://127.0.0.1:4321", source: "the default"})
+// A row is one thing to pick (#373): it is a whole row, not a grid of cells,
+// it carries its own Download, and tapping it opens the file's page — where the
+// facts are selectable and both copies work. Back returns to the list.
+func TestAccountRowOpensAPageWithBack(t *testing.T) {
+	view := newTestAccountView(t, apiChoice{url: "http://127.0.0.1:4321", source: "the default"})
 	view.ui.clip = test.NewClipboard()
 
-	view.files = []apiclient.File{{ID: "9f1a", Name: "notes.txt", Version: 3}}
-	view.selected = 0
+	view.files = []apiclient.File{{ID: "9f1a", Name: "notes", Ext: "txt", Version: 3}}
 	view.ready = true
-	view.updateActions()
+	view.fill()
 
-	if !strings.Contains(view.detail.Text, "notes.txt") || !strings.Contains(view.detail.Text, "9f1a") {
-		t.Errorf("detail = %q, want the name and the id", view.detail.Text)
+	row, ok := view.list.list.CreateItem().(*entryRow)
+	if !ok {
+		t.Fatal("a list item is not an entry row")
 	}
-	if !view.detail.Selectable {
-		t.Error("the detail line is not selectable")
+	view.list.list.UpdateItem(0, row)
+
+	if row.name.Text != "notes.txt" || !strings.Contains(row.info.Text, "version 3") || !strings.Contains(row.info.Text, "private") {
+		t.Errorf("row = %q / %q, want the name and one line of facts", row.name.Text, row.info.Text)
+	}
+	if row.download.Text != "Download" || row.download.OnTapped == nil {
+		t.Error("the row has no Download of its own")
 	}
 
-	view.copySelectedName()
+	view.list.list.Select(0)
 
+	if view.pages.atHome() {
+		t.Fatal("tapping the row did not open its page")
+	}
+
+	page := view.pages.stack.Objects[0]
+	for _, caption := range []string{"Back", "Download…", "Share", "Delete", "Copy name", "Copy details"} {
+		if findButton(page, caption) == nil {
+			t.Errorf("the file's page has no %q", caption)
+		}
+	}
+
+	test.Tap(findButton(page, "Copy name"))
 	if got := view.ui.clip.Content(); got != "notes.txt" {
 		t.Errorf("clipboard = %q, want just the name", got)
 	}
 
-	view.copySelectedDetails()
-
+	test.Tap(findButton(page, "Copy details"))
 	if got := view.ui.clip.Content(); got != "notes.txt\t3\tprivate\t9f1a" {
 		t.Errorf("clipboard = %q, want a tab-separated record", got)
 	}
 	if !strings.Contains(view.status.Text, "Copied") {
 		t.Errorf("status = %q, want confirmation of the copy", view.status.Text)
 	}
-}
 
-// Every cell is selectable — the header included — and a tap on a cell still
-// selects its row. The tap goes to the transparent layer above the label,
-// because a selectable label would otherwise swallow it.
-func TestFilesTableCellsAreSelectableAndSelectTheRow(t *testing.T) {
-	view := newTestFilesView(t, apiChoice{url: "http://127.0.0.1:4321", source: "the default"})
+	test.Tap(findButton(page, "Back"))
 
-	view.files = []apiclient.File{{ID: "1", Name: "notes.txt", Version: 2}}
-	view.ready = true
-	view.updateActions()
-
-	cell := view.table.CreateCell()
-	view.table.UpdateCell(widget.TableCellID{Row: 1, Col: 0}, cell)
-
-	stack, ok := cell.(*fyne.Container)
-	if !ok || len(stack.Objects) != 2 {
-		t.Fatalf("a table cell is %T, want a label and a tap layer", cell)
-	}
-
-	label, ok := stack.Objects[0].(*widget.Label)
-	if !ok {
-		t.Fatalf("the cell's first object is %T, want a label", stack.Objects[0])
-	}
-
-	if !label.Selectable {
-		t.Error("the cell text is not selectable")
-	}
-
-	if label.Text != "notes.txt" {
-		t.Errorf("cell = %q, want the file name", label.Text)
-	}
-
-	tap, ok := stack.Objects[1].(*tapTarget)
-	if !ok {
-		t.Fatalf("the cell's second object is %T, want a tap layer", stack.Objects[1])
-	}
-
-	test.Tap(tap)
-
-	if view.selected != 0 {
-		t.Errorf("selected = %d, want 0 after tapping the first row", view.selected)
-	}
-
-	header := view.table.CreateCell()
-	view.table.UpdateCell(widget.TableCellID{Row: 0, Col: 0}, header)
-
-	headerStack := header.(*fyne.Container)
-	headerLabel := headerStack.Objects[0].(*widget.Label)
-
-	if !headerLabel.Selectable || headerLabel.Text != "Name" {
-		t.Errorf("header cell = %q (selectable %t), want a selectable caption", headerLabel.Text, headerLabel.Selectable)
-	}
-
-	test.Tap(headerStack.Objects[1].(*tapTarget))
-
-	if view.selected != -1 {
-		t.Errorf("selected = %d, want the header tap to unselect", view.selected)
+	if !view.pages.atHome() {
+		t.Error("Back did not return to the list")
 	}
 }
 
-// With no row selected there is nothing to copy, and nothing to describe.
-func TestCopyIsOffWithoutASelection(t *testing.T) {
-	view := newTestFilesView(t, apiChoice{url: "http://127.0.0.1:4321", source: "the default"})
+// The filter is Templates / Files / All, and All lists templates first.
+func TestAccountFilterChoosesWhatIsListed(t *testing.T) {
+	view := newTestAccountView(t, apiChoice{url: "http://127.0.0.1:4321", source: "the default"})
 
-	view.selected = -1
-	view.ready = true
-	view.updateActions()
+	view.files = []apiclient.File{{ID: "1", Name: "notes", Ext: "txt", Version: 1}}
+	view.templates = []templates.TemplateData{{Name: "go-service", Kind: "go", Version: 2, FileCount: 4}}
 
-	if !view.copyName.Disabled() || !view.copyDetails.Disabled() {
-		t.Error("the copy buttons are enabled with no row selected")
+	view.fill()
+
+	tests := []struct {
+		show string
+		want []string
+	}{
+		{showAll, []string{"go-service", "notes.txt"}},
+		{showTemplates, []string{"go-service"}},
+		{showFiles, []string{"notes.txt"}},
 	}
-	if !strings.Contains(view.detail.Text, "Select a file") {
-		t.Errorf("detail = %q, want it to ask for a selection", view.detail.Text)
+
+	for _, tt := range tests {
+		view.show.SetSelected(tt.show)
+
+		var got []string
+		for _, item := range view.list.items {
+			got = append(got, item.name)
+		}
+
+		if strings.Join(got, ",") != strings.Join(tt.want, ",") {
+			t.Errorf("%s lists %v, want %v", tt.show, got, tt.want)
+		}
+	}
+}
+
+// A real listing fills the list from both routes.
+func TestAccountListsFilesAndTemplates(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/v1/files"):
+			_, _ = w.Write([]byte(`{"data":{"data":[{"id":"1","name":"notes","ext":"txt","version":1,"is_public":true}]}}`))
+		case strings.HasPrefix(r.URL.Path, "/v1/templates"):
+			_, _ = w.Write([]byte(`{"data":{"data":[{"id":"00000000-0000-0000-0000-000000000001","name":"go-service","kind":"go","version":1,"file_count":2}]}}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	u := newTestUI(t)
+	u.client = apiclient.New(server.URL).WithToken("the-token")
+
+	u.account.reload()
+	u.settle()
+
+	if len(u.account.list.items) != 2 {
+		t.Fatalf("listed %d rows, want a template and a file (status %q)", len(u.account.list.items), u.account.status.Text)
+	}
+	if u.account.list.items[0].kind != entryTemplate || u.account.list.items[1].kind != entryFile {
+		t.Error("the template is not listed before the file")
+	}
+	if !strings.Contains(u.account.list.items[1].info, "shared") {
+		t.Errorf("file info = %q, want its visibility", u.account.list.items[1].info)
 	}
 }
 
 // The address in the header is the thing a person changes, so it is a field
 // with a Connect action: typing a valid address switches the tab and is
 // remembered, and the session stays on the same host.
-func TestFilesAddressIsTypedAndConnected(t *testing.T) {
+func TestAccountAddressIsTypedAndConnected(t *testing.T) {
 	u := newTestUI(t)
 
 	u.client.Token = "the-token"
@@ -312,8 +318,8 @@ func TestFilesAddressIsTypedAndConnected(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	u.files.bar.entry.SetText("http://127.0.0.1:5000")
-	u.files.bar.connectTyped()
+	u.account.bar.entry.SetText("http://127.0.0.1:5000")
+	u.account.bar.connectTyped()
 
 	// The connect lands on the library, which starts a listing: let it finish
 	// before reading the window, or the worker's widget work overlaps this
@@ -336,35 +342,35 @@ func TestFilesAddressIsTypedAndConnected(t *testing.T) {
 
 // An address the client cannot use is refused where it was typed: nothing is
 // saved and the status says what is wrong.
-func TestFilesRefusesABadTypedAddress(t *testing.T) {
+func TestAccountRefusesABadTypedAddress(t *testing.T) {
 	u := newTestUI(t)
 
-	u.files.bar.entry.SetText("not a url")
-	u.files.bar.connectTyped()
+	u.account.bar.entry.SetText("not a url")
+	u.account.bar.connectTyped()
 
 	if _, err := config.Value("api_url"); err == nil {
 		t.Error("a bad address was saved")
 	}
 
-	if !strings.Contains(u.files.status.Text, "http://") {
-		t.Errorf("status = %q, want the validation message", u.files.status.Text)
+	if !strings.Contains(u.account.status.Text, "http://") {
+		t.Errorf("status = %q, want the validation message", u.account.status.Text)
 	}
 }
 
 // The checkbox is the choice: checked, the bar shows this machine's address and
 // keeps the field shut; unchecking opens it. Neither saves an address — Connect
 // is what switches.
-func TestFilesLocalCheckboxFillsTheField(t *testing.T) {
+func TestAccountLocalCheckboxFillsTheField(t *testing.T) {
 	u := newTestUI(t)
 
 	u.local = true
-	u.files.bar.sync()
+	u.account.bar.sync()
 
-	if got := u.files.bar.entry.Text; got != u.localAddress() {
-		t.Errorf("address = %q, want the Server tab's address %q", got, u.localAddress())
+	if got := u.account.bar.entry.Text; got != u.localAddress() {
+		t.Errorf("address = %q, want the Local server tab's address %q", got, u.localAddress())
 	}
 
-	if !u.files.bar.entry.Disabled() {
+	if !u.account.bar.entry.Disabled() {
 		t.Error("the field is open while the bar is set to this machine")
 	}
 
@@ -372,9 +378,9 @@ func TestFilesLocalCheckboxFillsTheField(t *testing.T) {
 		t.Error("setting the choice saved an address")
 	}
 
-	u.files.bar.local.SetChecked(false)
+	u.account.bar.local.SetChecked(false)
 
-	if u.files.bar.entry.Disabled() {
+	if u.account.bar.entry.Disabled() {
 		t.Error("unchecking did not open the field")
 	}
 
