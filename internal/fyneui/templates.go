@@ -24,8 +24,9 @@ import (
 const bundleExtension = ".eznit"
 
 // templatePage is one opened template, on the Web tab or on My Account: its
-// summary, its files, variables and commands in three tabs, and the two
-// actions that take it away — Save as bundle and Apply.
+// summary, its files as the folder they write with a preview of the selected
+// one, its variables and commands, and the two actions that take it away —
+// Save as bundle and Apply. On My Account it also has a Visibility dropdown.
 type templatePage struct {
 	ui     *ui
 	report func(text string, kind statusKind)
@@ -35,14 +36,25 @@ type templatePage struct {
 	export *widget.Button
 	apply  *widget.Button
 
+	// owned pages carry the Visibility dropdown; changed runs after a change
+	// lands, so the list behind the page can follow.
+	owned   bool
+	changed func(note string)
+
 	// built is the page, so a description that wraps can lay it out again and
 	// a late answer can tell whether its page is still the one on show.
 	built fyne.CanvasObject
 
-	summary   *prose
-	files     *prose
-	variables *prose
-	commands  *prose
+	summary    *prose
+	visibility *fyne.Container
+	variables  *prose
+	commands   *prose
+
+	// tree and preview are the Files tab: the folder on the left, the
+	// selected file's text on the right.
+	tree    *widget.Tree
+	preview *widget.Label
+	folder  folderTree
 
 	// parts is the template in three tabs; each tab's label carries its count,
 	// so a person can see that a template has variables without opening it.
@@ -60,11 +72,18 @@ func newTemplatePage(u *ui, report func(string, statusKind)) *templatePage {
 	page.apply.Importance = widget.HighImportance
 
 	page.summary = selectableWrap()
-	page.files = selectableWrap()
 	page.variables = selectableWrap()
 	page.commands = selectableWrap()
+	page.visibility = container.NewHBox()
 
-	page.filesTab = container.NewTabItem("Files (0)", part(page.files))
+	var previewBox fyne.CanvasObject
+	page.preview, previewBox = newPreview("Select a file to preview it.")
+
+	page.tree = newFolderTree(nil).widget(func(templateapply.File) {})
+	split := container.NewHSplit(page.tree, previewBox)
+	split.Offset = 0.35
+
+	page.filesTab = container.NewTabItem("Files (0)", split)
 	page.variablesTab = container.NewTabItem("Variables (0)", part(page.variables))
 	page.commandsTab = container.NewTabItem("Commands (0)", part(page.commands))
 	page.parts = container.NewAppTabs(page.filesTab, page.variablesTab, page.commandsTab)
@@ -74,17 +93,23 @@ func newTemplatePage(u *ui, report func(string, statusKind)) *templatePage {
 	return page
 }
 
-// content is the page under a Back button.
+// content is the page under a Back button: the summary and, for the owner,
+// the Visibility dropdown above the three tabs.
 func (p *templatePage) content(title string, back func()) fyne.CanvasObject {
-	body := container.NewBorder(container.NewPadded(p.summary), nil, nil, nil, p.parts)
-	p.built = detailPage(title, back, body, p.export, p.apply)
+	top := container.NewVBox(p.summary, p.visibility)
+	body := container.NewBorder(top, nil, nil, nil, p.parts)
+	p.built = detailPage(title, back, body, []fyne.CanvasObject{p.export, p.apply})
 
 	return p.built
 }
 
 // openTemplate shows a template's page and fetches the whole template into it.
-func openTemplate(u *ui, pages *pager, item templates.TemplateData, report func(string, statusKind)) *templatePage {
+// owned pages — My Account's — can change the template's visibility; changed
+// runs after one does.
+func openTemplate(u *ui, pages *pager, item templates.TemplateData, report func(string, statusKind), owned bool, changed func(note string)) *templatePage {
 	page := newTemplatePage(u, report)
+	page.owned = owned
+	page.changed = changed
 	pages.push(page.content(item.Name, pages.back))
 
 	id := item.ID.String()
@@ -133,10 +158,10 @@ func selectableWrap() *prose {
 // page is loading and keeps the actions off.
 func (p *templatePage) show(detail *templates.TemplateDetail) {
 	p.detail = detail
+	p.visibility.Objects = nil
 
 	if detail == nil {
 		p.summary.SetText("Loading the template…")
-		p.files.SetText("")
 		p.variables.SetText("")
 		p.commands.SetText("")
 		p.parts.Hide()
@@ -154,11 +179,42 @@ func (p *templatePage) show(detail *templates.TemplateDetail) {
 	}
 
 	p.summary.SetText(summary)
-	p.files.SetText(linesOr(detail.Files, fileLine, "No files."))
 	p.variables.SetText(linesOr(detail.Variables, variableLine, "None — this template asks nothing."))
 	p.commands.SetText(linesOr(detail.Commands, commandLine, "No commands."))
 
-	p.filesTab.Text = fmt.Sprintf("Files (%d)", len(detail.Files))
+	// The folder is what Apply writes: the files and the commands at their
+	// target paths. A template that cannot be written still shows its own
+	// files.
+	files, err := templateapply.Files(detail)
+	if err != nil {
+		files = nil
+		for _, file := range detail.Files {
+			files = append(files, templateapply.File{Path: file.Path, Kind: file.Kind, Content: file.Content, IsExecutable: file.IsExecutable})
+		}
+	}
+
+	p.folder = newFolderTree(files)
+	p.tree.ChildUIDs = func(id widget.TreeNodeID) []widget.TreeNodeID { return p.folder.children[id] }
+	p.tree.IsBranch = func(id widget.TreeNodeID) bool { return p.folder.isFolder(id) }
+	p.tree.UpdateNode = p.folder.updateNode
+	p.tree.OnSelected = func(id widget.TreeNodeID) {
+		if file, ok := p.folder.files[id]; ok {
+			p.preview.SetText(templateFilePreview(file))
+		}
+	}
+	p.tree.Refresh()
+	p.tree.OpenAllBranches()
+	p.preview.SetText("Select a file to preview it.")
+
+	if p.owned {
+		p.visibility.Objects = []fyne.CanvasObject{
+			widget.NewLabel("Visibility"),
+			newVisibilitySelect(detail.IsPublic, p.askVisibility),
+		}
+	}
+	p.visibility.Refresh()
+
+	p.filesTab.Text = fmt.Sprintf("Files (%d)", len(files))
 	p.variablesTab.Text = fmt.Sprintf("Variables (%d)", len(detail.Variables))
 	p.commandsTab.Text = fmt.Sprintf("Commands (%d)", len(detail.Commands))
 	p.parts.Show()
@@ -170,6 +226,70 @@ func (p *templatePage) show(detail *templates.TemplateDetail) {
 	// A description is prose: it can wrap to more lines than the page was
 	// measured for.
 	relayout(p.built)
+}
+
+// askVisibility confirms a change of visibility before it is sent (#376).
+func (p *templatePage) askVisibility(public bool, revert func()) {
+	detail := p.detail
+	if detail == nil {
+		revert()
+		return
+	}
+
+	title, message, action := visibilityQuestion("template", detail.Name, public)
+	confirm(p.ui, title, message, action, func(confirmed bool) {
+		if !confirmed {
+			revert()
+			return
+		}
+		p.setVisibility(public, revert)
+	})
+}
+
+// setVisibility sends the change; a refusal puts the dropdown back.
+func (p *templatePage) setVisibility(public bool, revert func()) {
+	id := p.detail.ID.String()
+	name := p.detail.Name
+	client := p.ui.client
+
+	p.report("Changing the visibility of "+name+"…", statusPending)
+
+	p.ui.background(func() {
+		updated, err := client.SetTemplateVisibility(id, public)
+
+		fyne.Do(func() {
+			if err != nil {
+				revert()
+				p.report("The visibility did not change: "+messageOf(err), statusError)
+				return
+			}
+
+			note := fmt.Sprintf("%s is %s now (version %d).", name, visibilityOf(updated.IsPublic), updated.Version)
+			p.show(updated)
+			p.report(note, statusOK)
+
+			// Last: the list's reload runs in the background, and nothing here
+			// may touch a widget while its answer can (#333). It says the note
+			// again when it lands, instead of a count.
+			if p.changed != nil {
+				p.changed(note)
+			}
+		})
+	})
+}
+
+// visibilityQuestion is the confirmation a change of visibility asks: what
+// will happen, to what, in words a person can copy.
+func visibilityQuestion(kind, name string, public bool) (title, message, action string) {
+	if public {
+		return "Make " + name + " public?",
+			fmt.Sprintf("Anyone who can reach this server will be able to see and download the %s %q from the Web tab, without an account.\n\nYou can make it private again later.", kind, name),
+			"Make public"
+	}
+
+	return "Make " + name + " private?",
+		fmt.Sprintf("The %s %q will leave the Web tab: only you will see it, on My Account. Copies people already downloaded are not affected.", kind, name),
+		"Make private"
 }
 
 // linesOr renders a slice one per line, or the empty state when it has

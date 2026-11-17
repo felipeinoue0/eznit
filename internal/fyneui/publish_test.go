@@ -12,6 +12,7 @@ import (
 	"sync"
 	"testing"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
 
 	"github.com/fiwon123/eznit/internal/apiclient"
@@ -159,7 +160,14 @@ func TestPublishFormSendsTheTemplate(t *testing.T) {
 	if _, ok := form.defaults["PROJECT_NAME"]; !ok || len(form.defaults) != 1 {
 		t.Errorf("placeholder fields = %v, want PROJECT_NAME only", form.defaults)
 	}
-	form.public.SetChecked(true)
+	// Private is the default; the dropdown is the choice (#376).
+	if form.visibility.Selected != "Private" {
+		t.Errorf("visibility = %q, want Private by default", form.visibility.Selected)
+	}
+	if !form.description.MultiLine || form.description.Wrapping != fyne.TextWrapWord {
+		t.Error("the description is not a wrapped multi-line field")
+	}
+	form.visibility.SetSelected("Public")
 	publish := form.send
 
 	test.Tap(publish)

@@ -40,7 +40,7 @@ const followTolerance = 24
 // folder, watch what it prints, and edit the .env beside it.
 //
 // It is a control panel, not a remote client: it drives a process on this
-// machine. A server elsewhere is reached from My Account, with an address.
+// machine. A server elsewhere is chosen on the Settings tab, with an address.
 type serverView struct {
 	ui *ui
 
@@ -1528,7 +1528,7 @@ func (v *serverView) notBundleNote() string {
 	return fmt.Sprintf(
 		"This folder is not a server bundle: it has no %s. A bundle is the extracted release archive — "+
 			"run eznit-gui from inside it, or choose that folder with Choose folder…. "+
-			"To use a server that already runs, type its address on My Account instead.",
+			"To use a server that already runs, type its address on the Settings tab instead.",
 		strings.Join(v.bundle.Missing(), " and "))
 }
 

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/fiwon123/eznit/internal/domain/templates"
 )
 
@@ -217,5 +219,61 @@ func TestPublishTemplateRefused(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "template name is required") {
 		t.Errorf("err = %q, want the server's sentence", err.Error())
+	}
+}
+
+// A visibility change is a read and a whole-template write with only the flag
+// different: the files, the variables in declared order and the commands by
+// reference all go back as they came.
+func TestSetTemplateVisibilityRewritesOnlyTheFlag(t *testing.T) {
+	commandID := uuid.MustParse("00000000-0000-0000-0000-0000000000c1")
+	stored := templates.TemplateDetail{
+		TemplateData: templates.TemplateData{Name: "starter", Slug: "starter", Kind: "generic", Description: "d"},
+		Files: []templates.TemplateFileData{
+			{Path: "a.md", Kind: templates.FileKindText, Content: "# a"},
+			{Path: "bin/x", Kind: templates.FileKindBinary, ContentBase64: "AA==", IsExecutable: true},
+		},
+		Variables: []templates.TemplateVariableData{
+			{Key: "SECOND", Position: 1},
+			{Key: "FIRST", Position: 0, Required: true},
+		},
+		Commands: []templates.TemplateCommandData{{CommandID: commandID, TargetPath: "run.sh"}},
+	}
+
+	var sent templates.PublishRequest
+	var method string
+
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPut {
+			method = r.Method
+			if r.URL.Path != "/v1/templates/t1" {
+				t.Errorf("PUT path = %q", r.URL.Path)
+			}
+			_ = json.NewDecoder(r.Body).Decode(&sent)
+			stored.IsPublic = sent.IsPublic
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": stored})
+	})
+
+	updated, err := client.SetTemplateVisibility("t1", true)
+	if err != nil {
+		t.Fatalf("SetTemplateVisibility() = %v", err)
+	}
+
+	if method != http.MethodPut || !sent.IsPublic || !updated.IsPublic {
+		t.Fatalf("method %q, sent public %v, answer public %v", method, sent.IsPublic, updated.IsPublic)
+	}
+	if len(sent.Files) != 2 || sent.Files[1].ContentBase64 != "AA==" || !sent.Files[1].IsExecutable {
+		t.Errorf("files = %+v, want both back unchanged", sent.Files)
+	}
+	if len(sent.Variables) != 2 || sent.Variables[0].Key != "FIRST" || !sent.Variables[0].Required {
+		t.Errorf("variables = %+v, want them in declared order", sent.Variables)
+	}
+	if len(sent.Commands) != 1 || sent.Commands[0].CommandID != commandID || sent.Commands[0].TargetPath != "run.sh" {
+		t.Errorf("commands = %+v, want the reference back", sent.Commands)
+	}
+	if sent.Name != "starter" || sent.Slug != "starter" || sent.Description != "d" {
+		t.Errorf("request = %+v, want the summary unchanged", sent)
 	}
 }

@@ -46,25 +46,19 @@ func TestLocalModeDefaultsToThisMachine(t *testing.T) {
 	}
 }
 
-// The Web tab has the same bar as My Account, without a session to end, and a
-// connect from it reloads the list from the new server.
-func TestWebHasTheSameAddressBar(t *testing.T) {
+// Settings holds the one address bar (#376). It offers no Sign out — that is
+// on the account screen — and it shows the connected address.
+func TestSettingsHasTheAddressBar(t *testing.T) {
 	u := newTestUI(t)
 
-	if u.web.bar == nil {
-		t.Fatal("the Web tab has no address bar")
+	if u.settings.bar == nil {
+		t.Fatal("Settings has no address bar")
 	}
-
-	if u.web.bar.signOut != nil {
-		t.Error("the Web bar offers Sign out")
+	if u.settings.bar.signOut != nil {
+		t.Error("the Settings bar offers Sign out")
 	}
-
-	if u.web.bar.afterConnect == nil {
-		t.Error("a connect from Web would not reload its list")
-	}
-
-	if got := u.web.bar.entry.Text; got != u.address.url {
-		t.Errorf("Web address = %q, want the connected one %q", got, u.address.url)
+	if got := u.settings.bar.entry.Text; got != u.address.url {
+		t.Errorf("Settings address = %q, want the connected one %q", got, u.address.url)
 	}
 }
 
@@ -75,21 +69,21 @@ func TestLocalBarShowsThisMachine(t *testing.T) {
 
 	u.local = true
 	u.address = apiChoice{url: u.localAddress(), source: localSource}
-	u.account.bar.sync()
+	u.settings.bar.sync()
 
-	if !u.account.bar.local.Checked {
+	if !u.settings.bar.local.Checked {
 		t.Error("the checkbox is not checked for the local mode")
 	}
 
-	if !u.account.bar.entry.Disabled() {
+	if !u.settings.bar.entry.Disabled() {
 		t.Error("the address field is open while the bar is local")
 	}
 
-	if got := u.account.bar.entry.Text; got != u.localAddress() {
+	if got := u.settings.bar.entry.Text; got != u.localAddress() {
 		t.Errorf("address = %q, want %q", got, u.localAddress())
 	}
 
-	if got := u.account.bar.source.Text; !strings.Contains(got, localSource) {
+	if got := u.settings.bar.source.Text; !strings.Contains(got, localSource) {
 		t.Errorf("source = %q, want %q", got, localSource)
 	}
 }
@@ -106,8 +100,7 @@ func TestAddressFieldShowsAWholeAddress(t *testing.T) {
 		index int
 		bar   func(*ui) *addressBar
 	}{
-		{"web", 0, func(u *ui) *addressBar { return u.web.bar }},
-		{"account", 1, func(u *ui) *addressBar { return u.account.bar }},
+		{"settings", 1, func(u *ui) *addressBar { return u.settings.bar }},
 	}
 
 	for _, tab := range tabs {

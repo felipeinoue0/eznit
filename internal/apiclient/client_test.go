@@ -409,3 +409,39 @@ func TestListSharedFiles(t *testing.T) {
 		}
 	})
 }
+
+// A preview reads the start of a file and says whether there is more, without
+// reading the rest.
+func TestPreviewFile(t *testing.T) {
+	body := strings.Repeat("x", 100)
+
+	client := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/files/f1/content" {
+			t.Errorf("path = %q", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(body))
+	})
+
+	tests := []struct {
+		name  string
+		limit int64
+		want  int
+		more  bool
+	}{
+		{"shorter than the file", 10, 10, true},
+		{"exactly the file", 100, 100, false},
+		{"longer than the file", 4096, 100, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			content, more, err := client.PreviewFile("f1", tt.limit)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(content) != tt.want || more != tt.more {
+				t.Errorf("read %d bytes, more %v; want %d, %v", len(content), more, tt.want, tt.more)
+			}
+		})
+	}
+}

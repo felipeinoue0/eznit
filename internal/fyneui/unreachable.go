@@ -62,7 +62,7 @@ func (v *unreachableView) content() fyne.CanvasObject {
 	title.Selectable = true
 
 	// The address is one line that ellipsizes: it is a value to check and to
-	// copy, and the field above it holds the whole of it.
+	// copy, and Settings holds the whole of it.
 	address := oneLine(v.address)
 	address.Alignment = fyne.TextAlignLeading
 
@@ -70,6 +70,8 @@ func (v *unreachableView) content() fyne.CanvasObject {
 
 	tryAgain := widget.NewButtonWithIcon("Try again", theme.ViewRefreshIcon(), v.ui.showMain)
 	tryAgain.Importance = widget.HighImportance
+
+	settings := widget.NewButtonWithIcon("Open Settings", theme.SettingsIcon(), v.ui.openSettings)
 
 	signOut := widget.NewButtonWithIcon("Sign out", theme.LogoutIcon(), v.ui.signOut)
 	signOut.Importance = widget.LowImportance
@@ -79,7 +81,7 @@ func (v *unreachableView) content() fyne.CanvasObject {
 		address,
 		reason,
 		widget.NewSeparator(),
-		container.NewHBox(tryAgain, signOut),
+		container.NewHBox(tryAgain, settings, signOut),
 	)
 
 	// The grid wrap gives the card its width; its height is a floor, so a
@@ -115,8 +117,8 @@ func unreachableReason(err error) string {
 	case status >= 500:
 		return fmt.Sprintf("The server answered %d. Try again in a moment.", status)
 	case status != 0:
-		return fmt.Sprintf("The server answered %d. Check the address above.", status)
+		return fmt.Sprintf("The server answered %d. Check the address in Settings.", status)
 	default:
-		return "The server did not answer. Start it, or type another address above."
+		return "The server did not answer. Start it, or choose another address in Settings."
 	}
 }

@@ -12,7 +12,6 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/fiwon123/eznit/internal/domain/templates"
@@ -135,12 +134,13 @@ func (v *accountView) publishFolder() {
 // publishDialog is the open form's controls. It is returned so a test can fill
 // it in and press Publish: Fyne's dialog keeps its tree to itself.
 type publishDialog struct {
-	name     *widget.Entry
-	kind     *widget.Select
-	public   *widget.Check
-	defaults map[string]*widget.Entry
-	send     *widget.Button
-	status   *prose
+	name        *widget.Entry
+	kind        *widget.Select
+	description *widget.Entry
+	visibility  *widget.Select
+	defaults    map[string]*widget.Entry
+	send        *widget.Button
+	status      *prose
 }
 
 // showPublishForm is the CLI's prompts as one dialog: name, kind, description,
@@ -152,16 +152,22 @@ func (v *accountView) showPublishForm(root string, files []templateapply.File, s
 	kind := widget.NewSelect(templates.Kinds, nil)
 	kind.SetSelected(templates.KindGeneric)
 
-	description := widget.NewEntry()
+	// The description is prose (#376): a few lines on show, wrapped, and a
+	// scrollbar of its own past them, so a long one never grows the dialog.
+	description := widget.NewMultiLineEntry()
+	description.Wrapping = fyne.TextWrapWord
+	description.SetMinRowsVisible(4)
 	description.SetPlaceHolder("What a project gets when it applies this")
 
-	public := widget.NewCheck("Public — everyone on this server can see and apply it", nil)
+	// Private is the default: publishing to everyone is a choice to make.
+	visibility := widget.NewSelect(visibilityChoices, nil)
+	visibility.SetSelected("Private")
 
 	rows := []formRow{
 		{caption: "Name *", input: name},
 		{caption: "Kind", input: kind},
 		{caption: "Description", input: description},
-		{caption: "Visibility", input: public},
+		{caption: "Visibility", input: visibility},
 	}
 
 	keys := templateapply.Undeclared(files, nil)
@@ -173,12 +179,12 @@ func (v *accountView) showPublishForm(root string, files []templateapply.File, s
 		defaults[key] = entry
 	}
 
-	input := formRows(rows...)
-	if len(rows) > 6 {
-		scroll := container.NewVScroll(input)
-		scroll.SetMinSize(fyne.NewSize(460, 260))
-		input = scroll
-	}
+	// The form scrolls inside the dialog: with the description's four lines
+	// and a question per placeholder it is taller than a small window, and a
+	// dialog that runs off the screen hides its own Publish button.
+	scroll := container.NewVScroll(formRows(rows...))
+	scroll.SetMinSize(fyne.NewSize(460, 220))
+	input := fyne.CanvasObject(scroll)
 
 	summary := fmt.Sprintf("%d file(s) from %s.", len(files), root)
 	if len(keys) > 0 {
@@ -205,7 +211,7 @@ func (v *accountView) showPublishForm(root string, files []templateapply.File, s
 			name:        name.Text,
 			kind:        kind.Selected,
 			description: description.Text,
-			public:      public.Checked,
+			public:      visibility.Selected == "Public",
 			defaults:    make(map[string]string, len(defaults)),
 		}
 		for key, entry := range defaults {
@@ -251,14 +257,17 @@ func (v *accountView) showPublishForm(root string, files []templateapply.File, s
 	})
 	send.Importance = widget.HighImportance
 
-	actions := container.NewHBox(layout.NewSpacer(), send)
-	content = container.NewVBox(newProse(summary), input, status, actions)
+	content = container.NewBorder(container.NewVBox(newProse(summary)), status, nil, nil, input)
 
-	popup = dialog.NewCustom("Publish a template", "Cancel", content, v.ui.window)
-	popup.Resize(fyne.NewSize(560, popup.MinSize().Height))
+	// Cancel and Publish side by side at the bottom, where a dialog's
+	// answers are: Publish used to sit on a line of its own above Cancel.
+	popup = dialog.NewCustomWithoutButtons("Publish a template", content, v.ui.window)
+	cancel := widget.NewButton("Cancel", popup.Hide)
+	popup.SetButtons([]fyne.CanvasObject{cancel, send})
 	popup.Show()
+	popup.Resize(fyne.NewSize(560, popup.MinSize().Height))
 
-	return &publishDialog{name: name, kind: kind, public: public, defaults: defaults, send: send, status: status}
+	return &publishDialog{name: name, kind: kind, description: description, visibility: visibility, defaults: defaults, send: send, status: status}
 }
 
 func capitalize(text string) string {

@@ -298,6 +298,7 @@ func TestAccountTabTextDoesNotOverlap(t *testing.T) {
 			assertTextFits(t, view.ui.window.Content())
 
 			view.openFile(file)
+			view.ui.settle()
 
 			layOut(view.ui.window, size)
 			assertNoTextOverlap(t, view.ui.window.Content())
@@ -317,7 +318,7 @@ func TestWebTabTextDoesNotOverlap(t *testing.T) {
 				url:    "http://a-very-long-server-name.example.com:4000",
 				source: "the address you entered on another machine",
 			}
-			u.web.bar.sync()
+			u.settings.bar.sync()
 
 			detail := sampleDetail(t)
 			detail.Description = strings.Repeat("A description long enough that it has to wrap at every supported window size. ", 4)
@@ -496,4 +497,60 @@ func TestServerHeaderActionsShareOneEdge(t *testing.T) {
 	if gap := folderRow.pos.X + folderRow.size.Width - right; gap > 1 || gap < -1 {
 		t.Errorf("the folder row ends %.1f px from the status row's right edge", gap)
 	}
+}
+
+// findSelect is the first dropdown under root.
+func findSelect(root fyne.CanvasObject) *widget.Select {
+	var found *widget.Select
+
+	walkTree(root, fyne.NewPos(0, 0), func(object fyne.CanvasObject, _ fyne.Position) {
+		if choice, ok := object.(*widget.Select); ok && found == nil {
+			found = choice
+		}
+	})
+
+	return found
+}
+
+// deepWalk visits everything under root, descending into widgets' renderers
+// too: a dialog is a widget that keeps its body and buttons in its renderer.
+func deepWalk(root fyne.CanvasObject, visit func(fyne.CanvasObject)) {
+	visit(root)
+
+	switch typed := root.(type) {
+	case *fyne.Container:
+		for _, child := range typed.Objects {
+			deepWalk(child, visit)
+		}
+	case fyne.Widget:
+		for _, child := range test.WidgetRenderer(typed).Objects() {
+			deepWalk(child, visit)
+		}
+	}
+}
+
+// dialogButton is the button with caption somewhere under a dialog.
+func dialogButton(root fyne.CanvasObject, caption string) *widget.Button {
+	var found *widget.Button
+
+	deepWalk(root, func(object fyne.CanvasObject) {
+		if button, ok := object.(*widget.Button); ok && button.Text == caption && found == nil {
+			found = button
+		}
+	})
+
+	return found
+}
+
+// dialogProse is every wrapped label under a dialog.
+func dialogProse(root fyne.CanvasObject) []*prose {
+	var found []*prose
+
+	deepWalk(root, func(object fyne.CanvasObject) {
+		if label, ok := object.(*prose); ok {
+			found = append(found, label)
+		}
+	})
+
+	return found
 }

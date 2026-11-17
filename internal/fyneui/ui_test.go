@@ -141,11 +141,12 @@ func newTestUI(t *testing.T) *ui {
 	u.client = apiclient.New(u.address.url)
 	u.web = newWebView(u)
 	u.account = newAccountView(u)
+	u.settings = newSettingsView(u)
 
 	// The window's own tabs, without the Local server one: these tests do not
 	// start a server.
 	u.buildTabs()
-	u.window.SetContent(u.tabs)
+	u.window.SetContent(u.mainScreen)
 
 	// Settle before the app quits. A request still in flight would otherwise
 	// touch widgets after the driver is gone, and the -race suite would report
@@ -185,7 +186,7 @@ func TestConnectWithoutASessionShowsLogin(t *testing.T) {
 		t.Error("a connect without a session did not report a sign-out")
 	}
 
-	if findButton(u.accountTab.Content, "Log in") == nil {
+	if findButton(u.accountBody.Objects[0], "Log in") == nil {
 		t.Error("My Account shows no login card after a connect without a session")
 	}
 }
@@ -238,11 +239,13 @@ func TestSignOutLivesOnMyAccount(t *testing.T) {
 	library := u.account.built
 
 	// Sign out is pressed on My Account, so that is the tab on show.
-	u.tabs.Select(u.accountTab)
+	u.showAccount()
 
-	signOut := findButton(u.accountTab.Content, "Sign out")
-	if signOut == nil {
-		t.Fatal("My Account has no Sign out button")
+	// Sign out is in the account screen's header, shown with a session.
+	u.updateAccountButton()
+	signOut := findButton(u.accountScreen, "Sign out")
+	if signOut == nil || signOut.Hidden {
+		t.Fatal("the account screen has no Sign out button")
 	}
 
 	test.Tap(signOut)
@@ -264,7 +267,7 @@ func TestSignOutLivesOnMyAccount(t *testing.T) {
 		t.Error("the account's templates are still loaded after signing out")
 	}
 
-	if u.accountTab.Content == library {
+	if u.accountBody.Objects[0] == library {
 		t.Error("My Account still shows the library")
 	}
 

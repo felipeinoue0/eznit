@@ -306,10 +306,11 @@ The GUI reads `GUI_API_URL` (the default server address), `-api` and
 `server_dir`. The address is resolved as `-api`, then `GUI_API_URL`, then the
 saved address, then this machine, and the last one is a **mode**: a window that
 has never chosen is local, so both tabs start on the server the Local server tab
-would run. The Web and My Account headers carry the same bar — a **Use this
-machine** checkbox, the address field, **Test** (a `/v1/healthcheck` call that
-saves nothing), **Connect** (validate, then switch) and the source line; My
-Account adds **Sign out**. Checked, the field follows the Local server tab's folder and is shut;
+would run. The **Settings** tab is the only place the address is chosen (#376):
+a **Use this machine** checkbox, the address field, **Test** (a
+`/v1/healthcheck` call that saves nothing), **Connect** (validate, then switch)
+and the source line. The sign-in card names the address and links to Settings;
+**Sign out** is in the account screen's header. Checked, the field follows the Local server tab's folder and is shut;
 unchecked, the saved or typed address is used. The choice is stored as
 `api_local`, and a flag or environment address arrives unchecked because an
 explicit override is not "this machine". `apiclient.ValidateBaseURL` and
@@ -326,13 +327,16 @@ A failed listing is read by its answer, not only by its arrival. `401` means the
 API judged the token and refused it, so the window forgets the session and the
 login form follows; anything else — no answer, a 5xx — leaves the token alone
 and puts a **Cannot reach this server** panel in the tab, with **Try again** and
-the address bar still above it. The panel exists because a list with no rows
+**Open Settings** beside it. The panel exists because a list with no rows
 and a status line under it reads as "signed in, nothing here", which is exactly
 what the window cannot know. `apiclient.ErrUnreachable` is what separates the two
 cases in Go.
 
-The session belongs to My Account: it is the tab that shows the login form
-when there is no token, and its header carries **Sign out**. Signing out removes
+The session belongs to the account screen — opened by the **Sign in** / **My
+Account** button at the right end of the tab bar, closed with **Close**: it shows
+the login form when there is no token, and its header carries **Sign out**. A
+session that ends while the tabs are up brings the screen forward with the
+reason. Signing out removes
 only `token` — the address, the server folder and the git-host tokens stay — and
 drops the account's list and the Web list (whose owner names depend on the
 session). The About tab is the window's
@@ -365,9 +369,10 @@ a decision. "Reset to default" removes the key and returns to the folder
 controls refuse while the server runs, because the process belongs to the folder
 it was started from.
 
-The window's tabs are **Web**, **My Account**, **Local server** and **About**
-(#373). Web and My Account share one shape (`internal/fyneui/entries.go`): a
-Templates / Files / All filter, a `widget.List` of whole rows — an icon, the
+The window's tabs are **Web**, **Local server**, **Settings** and **About**, with
+the account as a screen of its own (#373, #376). Web and My Account share one
+shape (`internal/fyneui/entries.go`), inside a page margin: an All / Templates /
+Files dropdown, a `widget.List` of whole rows — an icon, the
 name over one line of facts, and **Download** at the right edge — and a detail
 page with **Back** that replaces the list when a row is opened. A row is
 selected as a whole; the old tables selected one cell at a time, and a cell said
@@ -375,11 +380,17 @@ nothing the row did not. **Web** lists what anyone made public — the public
 templates of `GET /v1/templates` and `GET /v1/files/shared` — and needs no
 session. **My Account** lists the account's own files (`GET /v1/files`) and
 templates (`GET /v1/templates/mine`), with **Upload file…** and **Publish
-template…**; a file's page keeps Download, Share/Unshare, Delete and the two
-copies. A template row's Download fetches `/{id}` and writes the offline bundle
-with `templates.NewBundle` and `templates.WriteBundle`; its page shows the
-summary followed by three tabs carrying their counts, with **Save as bundle…**
-and **Apply…**. That pair comes from `internal/domain/templates` rather
+template…**. A file's page shows its details and a preview of its first 32 KiB
+(`GET /v1/files/{id}/content`, read with a limit), with Download at the top and
+Delete apart at the bottom. A template's page shows its summary and three tabs
+with counts — **Files** is the folder Apply writes as a tree
+(`internal/fyneui/tree.go`) beside a preview of the selected file. On the
+owner's pages a **Visibility** dropdown switches Private ↔ Public after a
+confirmation whose text is selectable; a template's switch re-sends the whole
+template with the flag changed (`apiclient.SetTemplateVisibility`, as the web
+page does), because the API has no partial update. A template row's Download
+fetches `/{id}` and writes the offline bundle with `templates.NewBundle` and
+`templates.WriteBundle`. That pair comes from `internal/domain/templates` rather
 than being copied into the client: the bundle format has one definition, shared
 with `template export`, so the window cannot write a file the CLI refuses to
 read. It is a data dependency — DTOs and the bundle — and `apiclient` returns

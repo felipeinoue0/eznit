@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/fiwon123/eznit/internal/apiclient"
@@ -21,7 +22,7 @@ func TestUnreachablePanelNamesTheAddress(t *testing.T) {
 	address := "http://127.0.0.1:4321"
 	u.showUnreachable(address, fmt.Errorf("%w: dial tcp %s: connect: connection refused", apiclient.ErrUnreachable, address))
 
-	content := u.accountTab.Content
+	content := u.accountBody.Objects[0]
 
 	if findLabel(content, "Cannot reach this server") == nil {
 		t.Error("the panel has no headline")
@@ -58,7 +59,7 @@ func TestUnreachablePanelNamesAnUnexpectedAnswer(t *testing.T) {
 		want   string
 	}{
 		{"a server in trouble", 503, "answered 503. Try again in a moment"},
-		{"a wrong address", 404, "answered 404. Check the address above"},
+		{"a wrong address", 404, "answered 404. Check the address in Settings"},
 	}
 
 	for _, tt := range tests {
@@ -67,31 +68,30 @@ func TestUnreachablePanelNamesAnUnexpectedAnswer(t *testing.T) {
 
 			u.showUnreachable("http://127.0.0.1:4321", &apiclient.APIError{Status: tt.status})
 
-			if got := panelText(u.accountTab.Content); !strings.Contains(got, tt.want) {
+			if got := panelText(u.accountBody.Objects[0]); !strings.Contains(got, tt.want) {
 				t.Errorf("the panel says %q, want %q", got, tt.want)
 			}
 		})
 	}
 }
 
-// The address bar stays usable while the panel is up, and its answers — a Test,
-// a refused address — land in the panel's own line: the library's status line
-// is in a container the tab no longer shows.
-func TestUnreachablePanelAnswersTheAddressBar(t *testing.T) {
+// The address is changed on Settings (#376): the panel's Open Settings closes
+// the account screen and selects that tab.
+func TestUnreachablePanelOpensSettings(t *testing.T) {
 	u := newTestUI(t)
 
 	u.showUnreachable("http://127.0.0.1:4321", fmt.Errorf("%w: no route to host", apiclient.ErrUnreachable))
+	u.showAccount()
 
-	content := u.accountTab.Content
-
-	if !holds(content, u.account.bar.entry) {
-		t.Fatal("the panel's address bar is not on screen")
+	open := findButton(u.accountBody.Objects[0], "Open Settings")
+	if open == nil {
+		t.Fatal("the panel has no Open Settings")
 	}
 
-	u.account.bar.message("No answer from http://127.0.0.1:4321", statusError)
+	test.Tap(open)
 
-	if got := panelText(content); !strings.Contains(got, "No answer from http://127.0.0.1:4321") {
-		t.Errorf("the panel says %q, want the bar's answer", got)
+	if u.accountShown() || u.tabs.Selected() != u.settingsTab {
+		t.Error("Open Settings did not land on the Settings tab")
 	}
 }
 

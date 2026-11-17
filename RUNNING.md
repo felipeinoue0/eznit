@@ -114,16 +114,16 @@ it is pointed at is another bundle.
   **Revert** reads the file again and discards the edit; **Save configuration**
   answers "nothing to save" when nothing changed.
 
-The window is also a client: the **Files** tab signs in to one eznit API and
-always shows which. Its header is an address bar, and the **Templates** tab has
-the same one:
+The window is also a client of one eznit API, chosen on the **Settings** tab —
+the only place the address is set. **My Account**, the button at the right end
+of the tab bar, signs in to it and names it:
 
 - **Use this machine** is the default and is remembered: checked, the field
   shows the server the Local server tab would run, on the port that folder's
   configuration names, and is shut; unchecked, the field takes any address.
 - **Connect** validates the address and switches to it, remembering it. It is
-  not a login: with no session in the window My Account keeps its login card,
-  whatever address was connected to.
+  not a login: with no session in the window the account screen keeps its login
+  card, whatever address was connected to.
 - **Test** asks the address `/v1/healthcheck` without saving it.
 - The source line under the checkbox names where the address came from: this
   machine, `-api`, `GUI_API_URL`, or an address you typed.
@@ -140,7 +140,7 @@ out; a port change on one host keeps the session.
 A failed listing is read by its answer. A `401` means the API refused the token,
 so the session is forgotten and the login card comes back; a server that does not
 answer keeps the token and shows a **Cannot reach this server** panel with
-**Try again** and the address bar above it — stopping a server you started is
+**Try again** and **Open Settings** — stopping a server you started is
 not a sign-out, and a server that comes back needs no password. Sign-in failures
 are one sentence in the theme's error colour: `Wrong email or password.`,
 `Passwords do not match.`, `Cannot reach http://…`.
