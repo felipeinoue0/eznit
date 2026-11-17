@@ -554,3 +554,41 @@ func dialogProse(root fyne.CanvasObject) []*prose {
 
 	return found
 }
+
+// TestSettingsLocalServerKeepsThePageInset is #382: in Settings the local server
+// panel sits beside the section list, and it ran to the window's right edge
+// with the folder path cut off at 800 px. Every header action stays inside the
+// page inset, and the folder field is wider than its actions put together.
+func TestSettingsLocalServerKeepsThePageInset(t *testing.T) {
+	view := newTestServerView(t, bundleDir(t, "API_PORT=\"4000\"\n"))
+	u := view.ui
+	u.settings = newSettingsView(u)
+	view.built = nil
+	u.window.SetContent(u.settings.content())
+	u.settings.showSection(u.settings.localSection)
+
+	for _, size := range windowSizes() {
+		t.Run(fmt.Sprintf("%.0fx%.0f", size.Width, size.Height), func(t *testing.T) {
+			layOut(u.window, size)
+
+			// The test window pads its content; the page's edge is the content's.
+			root := u.window.Content()
+			edge := u.app.Driver().AbsolutePositionForObject(root).X + root.Size().Width
+
+			for _, button := range []*widget.Button{view.start, view.stop, view.open, view.use, view.choose, view.reset} {
+				// The panel is inside the section tabs, a widget placeOf does not
+				// descend into; the driver knows where it drew the button.
+				pos := u.app.Driver().AbsolutePositionForObject(button)
+
+				if margin := edge - (pos.X + button.Size().Width); margin < pageInset-1 {
+					t.Errorf("%q ends %.1f px from the page's right edge, want at least %.0f", button.Text, margin, pageInset)
+				}
+			}
+
+			actions := view.use.MinSize().Width + view.choose.MinSize().Width + view.reset.MinSize().Width
+			if width := view.folder.Size().Width; width < actions {
+				t.Errorf("the folder field is %.0f px wide, narrower than its %.0f px of actions", width, actions)
+			}
+		})
+	}
+}
