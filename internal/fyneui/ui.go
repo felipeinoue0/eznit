@@ -46,7 +46,7 @@ type ui struct {
 	address apiChoice
 
 	// local is the "Use this machine" choice. While it is on, the address bars
-	// fill themselves from the Local server tab's folder; the choice is remembered.
+	// fill themselves from the local server's folder; the choice is remembered.
 	local bool
 
 	client   *apiclient.Client
@@ -58,18 +58,25 @@ type ui struct {
 
 	tabs *container.AppTabs
 
-	// webTab and settingsTab are kept by identity, not position.
-	webTab      *container.TabItem
-	settingsTab *container.TabItem
+	// The two tabs, kept by identity: Workspace is in the bar only while a
+	// session is (#379).
+	webTab       *container.TabItem
+	workspaceTab *container.TabItem
 
-	// The window shows one of two screens (#376): the tabs, with the account
-	// button at the far right of their bar, or the account — the login card,
-	// the account's list, or the unreachable panel in accountBody — with Close.
+	// The window shows the tabs (mainScreen) or one full-window screen with
+	// Close: the login card, Settings or About. The bar's right end carries the
+	// buttons that open them, and Log in turns into Log out with a session.
 	mainScreen     fyne.CanvasObject
-	accountScreen  fyne.CanvasObject
-	accountBody    *fyne.Container
-	accountButton  *widget.Button
-	accountSignOut *widget.Button
+	loginScreen    fyne.CanvasObject
+	settingsScreen fyne.CanvasObject
+	aboutScreen    fyne.CanvasObject
+	loginBody      *fyne.Container
+	workspaceBody  *fyne.Container
+	sessionButton  *widget.Button
+
+	// quietTabs is set while the window changes the tab bar itself, so the
+	// selection that follows does not start a load mid-change (#333).
+	quietTabs bool
 
 	// work counts the background requests the tabs have running, so a test can
 	// wait for the window to be idle instead of polling it while it is busy
@@ -102,7 +109,7 @@ func Run(version string, apiURL string, serverDir string) error {
 		updater: newAppUpdater(version),
 	}
 
-	// The default mode is this machine, and its address is the Local server tab's
+	// The default mode is this machine, and its address is the local server's
 	// folder. That folder is not known until the view exists, so the default
 	// stand-in is replaced below.
 	if u.local {
@@ -120,10 +127,10 @@ func Run(version string, apiURL string, serverDir string) error {
 		u.client = apiclient.New(u.address.url)
 	}
 
-	// The tabs exist before a session does. Web needs none, and the Local
-	// server tab has to be usable on a machine whose server has never run —
-	// running it and pointing it at a database is how a first install gets
-	// something to log in to.
+	// The tabs exist before a session does. Explore needs none, and the local
+	// server in Settings has to be usable on a machine whose server has never
+	// run — running it and pointing it at a database is how a first install
+	// gets something to log in to.
 	u.buildTabs()
 
 	window.SetContent(u.mainScreen)
@@ -160,7 +167,7 @@ func Run(version string, apiURL string, serverDir string) error {
 		u.showMain()
 	}
 
-	// Web is the first tab, so it loads now rather than on a tab change.
+	// Explore is the first tab, so it loads now rather than on a tab change.
 	u.web.ensureLoaded()
 
 	go u.server.pollHealth()
@@ -170,49 +177,58 @@ func Run(version string, apiURL string, serverDir string) error {
 	return nil
 }
 
-// buildTabs lays out the window (#376): on the left the tabs a person works
-// in — Web, Local server, Settings, About — and on the far right of their bar
-// the account button, which opens the account screen.
+// buildTabs lays out the window (#379): on the left the tabs a person works
+// in — Explore, and Workspace once logged in — and on the right of their bar
+// Log in (Log out with a session), Settings and About.
 func (u *ui) buildTabs() {
-	u.webTab = container.NewTabItemWithIcon("Web", theme.GridIcon(), u.web.content())
-	u.settingsTab = container.NewTabItemWithIcon("Settings", theme.SettingsIcon(), u.settings.content())
+	u.webTab = container.NewTabItemWithIcon("Explore", theme.SearchIcon(), u.web.content())
 
-	items := []*container.TabItem{u.webTab}
-	if u.server != nil {
-		items = append(items, container.NewTabItemWithIcon("Local server", theme.ComputerIcon(), u.server.content()))
-	}
-	items = append(items, u.settingsTab, container.NewTabItemWithIcon("About", theme.InfoIcon(), u.aboutContent()))
+	u.workspaceBody = container.NewStack(u.account.content())
+	u.workspaceTab = container.NewTabItemWithIcon("Workspace", theme.FolderIcon(), u.workspaceBody)
 
-	u.tabs = container.NewAppTabs(items...)
+	u.tabs = container.NewAppTabs(u.webTab)
 
-	// The button sits over the empty right end of the tab bar: the bar is
-	// the tabs' own, and a button in it reads as part of it.
-	u.accountButton = widget.NewButtonWithIcon("Sign in", theme.AccountIcon(), u.showAccount)
-	u.accountButton.Importance = widget.LowImportance
-	corner := container.NewVBox(container.NewHBox(layout.NewSpacer(), u.accountButton))
+	u.sessionButton = widget.NewButtonWithIcon("Log in", theme.LoginIcon(), u.sessionAction)
+	u.sessionButton.Importance = widget.LowImportance
+	settings := widget.NewButtonWithIcon("Settings", theme.SettingsIcon(), u.openSettings)
+	settings.Importance = widget.LowImportance
+	about := widget.NewButtonWithIcon("About", theme.InfoIcon(), func() { u.showScreen(u.aboutScreen) })
+	about.Importance = widget.LowImportance
+
+	// The buttons sit over the empty right end of the tab bar: the bar is the
+	// tabs' own, and buttons in it read as part of it.
+	corner := container.NewVBox(container.NewHBox(layout.NewSpacer(), u.sessionButton, settings, about))
 	u.mainScreen = container.NewStack(u.tabs, container.New(layout.NewCustomPaddedLayout(0, 0, 0, pageInset), corner))
 
-	u.accountSignOut = widget.NewButtonWithIcon("Sign out", theme.LogoutIcon(), u.signOut)
-	u.accountSignOut.Importance = widget.LowImportance
-	closeAccount := widget.NewButtonWithIcon("Close", theme.CancelIcon(), u.hideAccount)
+	u.loginBody = container.NewStack(newLoginView(u, "", statusIdle).content())
+	u.loginScreen = u.screen("Log in", theme.LoginIcon(), u.loginBody)
+	u.settingsScreen = u.screen("Settings", theme.SettingsIcon(), u.settings.content())
+	u.aboutScreen = u.screen("About", theme.InfoIcon(), inset(u.aboutContent()))
 
-	title := widget.NewLabelWithStyle("My Account", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
-	header := container.NewVBox(
-		container.New(layout.NewCustomPaddedLayout(theme.Padding(), 0, pageInset, pageInset),
-			container.NewBorder(nil, nil, widget.NewIcon(theme.AccountIcon()), container.NewHBox(u.accountSignOut, closeAccount), title)),
-		widget.NewSeparator(),
-	)
-	u.accountBody = container.NewStack(u.account.content())
-	u.accountScreen = container.NewBorder(header, nil, nil, nil, u.accountBody)
-	u.updateAccountButton()
+	u.updateSessionButton()
 
-	// The Web list is per server and per session; it reloads when it is shown
-	// after either changed.
+	// Explore is per server and per session; it reloads when it is shown after
+	// either changed.
 	u.tabs.OnSelected = func(item *container.TabItem) {
-		if item == u.webTab {
+		if item == u.webTab && !u.quietTabs {
 			u.web.ensureLoaded()
 		}
 	}
+}
+
+// screen is a full-window page: its title on the left of a header, Close on
+// the right, and its body under them.
+func (u *ui) screen(title string, icon fyne.Resource, body fyne.CanvasObject) fyne.CanvasObject {
+	closeButton := widget.NewButtonWithIcon("Close", theme.CancelIcon(), u.showTabs)
+
+	name := widget.NewLabelWithStyle(title, fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	header := container.NewVBox(
+		container.New(layout.NewCustomPaddedLayout(theme.Padding(), 0, pageInset, pageInset),
+			container.NewBorder(nil, nil, widget.NewIcon(icon), closeButton, name)),
+		widget.NewSeparator(),
+	)
+
+	return container.NewBorder(header, nil, nil, nil, body)
 }
 
 // serverFrom decides the server folder: the flag, then the stored setting,
@@ -265,7 +281,7 @@ func apiFrom(flagValue string) apiChoice {
 	return apiChoice{url: apiclient.NormalizeBaseURL(""), source: "the default"}
 }
 
-// localAddress is the API that a server started from the Local server tab's folder
+// localAddress is the API that a server started from the local server's folder
 // answers on. The port comes from that folder's configuration, so the two tabs
 // cannot disagree about where "this machine" is.
 func (u *ui) localAddress() string {
@@ -295,13 +311,13 @@ func (u *ui) connect(choice apiChoice) (bool, error) {
 
 	u.syncAddressBars()
 
-	// A connect is not a login. Connecting from the Web tab with no
+	// A connect is not a login. Connecting from Settings with no
 	// session used to put the empty library in front of a window that had
 	// nothing to fill it with, and the tab only said so after a request failed
 	// (#336). The message names the address, because the card's own field is
 	// where a wrong one gets fixed.
 	if signedOut || u.client.Token == "" {
-		u.showLogin("Sign in to " + choice.url + ".")
+		u.showLogin("Log in to " + choice.url + ".")
 
 		return true, nil
 	}
@@ -329,50 +345,107 @@ func (u *ui) currentAddress() string {
 	return u.address.url
 }
 
-// showAccount puts the account screen in the window.
-func (u *ui) showAccount() {
-	if u.accountScreen != nil {
-		u.window.SetContent(u.accountScreen)
+// showScreen puts a full-window screen in the window.
+func (u *ui) showScreen(screen fyne.CanvasObject) {
+	if screen != nil {
+		u.window.SetContent(screen)
 	}
 }
 
-// hideAccount goes back to the tabs.
-func (u *ui) hideAccount() {
+// showTabs goes back to the tabs.
+func (u *ui) showTabs() {
 	if u.mainScreen != nil {
 		u.window.SetContent(u.mainScreen)
 	}
 }
 
-// openSettings leaves the account screen for the Settings tab, where the
-// server is chosen.
+// screenShown reports whether screen is the one on show.
+func (u *ui) screenShown(screen fyne.CanvasObject) bool {
+	return screen != nil && u.window.Content() == screen
+}
+
+// openSettings shows Settings at its Server section, where the address is
+// chosen.
 func (u *ui) openSettings() {
-	u.hideAccount()
-
-	if u.tabs != nil && u.settingsTab != nil {
-		u.tabs.Select(u.settingsTab)
+	if u.settings != nil {
+		u.settings.showSection(u.settings.serverSection)
 	}
+
+	u.showScreen(u.settingsScreen)
 }
 
-// accountShown reports whether the account screen is the one on show.
-func (u *ui) accountShown() bool {
-	return u.accountScreen != nil && u.window.Content() == u.accountScreen
+// sessionAction is the bar's Log in / Log out button.
+func (u *ui) sessionAction() {
+	if u.client.Token == "" {
+		u.showScreen(u.loginScreen)
+		return
+	}
+
+	u.signOut()
 }
 
-// updateAccountButton names the account button by the session: Sign in
-// without one, My Account with one. Sign out is only offered with one.
-func (u *ui) updateAccountButton() {
-	if u.accountButton == nil {
+// updateSessionButton names the button by the session.
+func (u *ui) updateSessionButton() {
+	if u.sessionButton == nil {
 		return
 	}
 
 	if u.client.Token == "" {
-		u.accountButton.SetText("Sign in")
-		u.accountSignOut.Hide()
+		u.sessionButton.SetText("Log in")
+		u.sessionButton.SetIcon(theme.LoginIcon())
 		return
 	}
 
-	u.accountButton.SetText("My Account")
-	u.accountSignOut.Show()
+	u.sessionButton.SetText("Log out")
+	u.sessionButton.SetIcon(theme.LogoutIcon())
+}
+
+// hasWorkspaceTab reports whether Workspace is in the bar.
+func (u *ui) hasWorkspaceTab() bool {
+	if u.tabs == nil {
+		return false
+	}
+
+	for _, item := range u.tabs.Items {
+		if item == u.workspaceTab {
+			return true
+		}
+	}
+
+	return false
+}
+
+// addWorkspaceTab puts Workspace in the bar after Explore.
+func (u *ui) addWorkspaceTab() {
+	if u.tabs != nil && !u.hasWorkspaceTab() {
+		u.tabs.Append(u.workspaceTab)
+	}
+}
+
+// removeWorkspaceTab takes Workspace out of the bar, landing on Explore when
+// it was the tab on show.
+func (u *ui) removeWorkspaceTab() {
+	if !u.hasWorkspaceTab() {
+		return
+	}
+
+	u.quietTabs = true
+	defer func() { u.quietTabs = false }()
+
+	if u.tabs.Selected() == u.workspaceTab {
+		u.tabs.Select(u.webTab)
+	}
+
+	u.tabs.Remove(u.workspaceTab)
+}
+
+// reloadExploreLast loads Explore again when it is the tab on show. Callers
+// make it their last step: the load runs in the background, and nothing may
+// touch a widget while its answer can (#333).
+func (u *ui) reloadExploreLast() {
+	if u.tabs != nil && u.web != nil && u.tabs.Selected() == u.webTab {
+		u.web.reload()
+	}
 }
 
 // setAPI points the client at an instance and keeps the stored session: the
@@ -426,9 +499,9 @@ func (u *ui) useServer(address apiChoice) (bool, error) {
 	return true, nil
 }
 
-// showMain swaps My Account to the signed-in account.
+// showMain puts the signed-in account in Workspace and the tab in the bar.
 func (u *ui) showMain() {
-	// A session names the owners on the Web tab: drop the list, and it loads
+	// A session names the owners on Explore: drop the list, and it loads
 	// again when the tab is next shown. It is not reloaded from here — the
 	// account's own listing is already running, and two workers touching
 	// widgets at once is what #333 removed.
@@ -436,13 +509,35 @@ func (u *ui) showMain() {
 		u.web.forget()
 	}
 
-	u.setAccountTab(u.account.content())
-	u.updateAccountButton()
+	u.setWorkspace(u.account.content())
+	u.addWorkspaceTab()
+	u.updateSessionButton()
 	u.account.reload()
 }
 
-// showLogin puts the sign-in form on My Account. The window keeps its other
-// tabs: a signed-out user can still run a local server from here.
+// openWorkspace is a fresh login's landing: the tabs, on Workspace. It is
+// showMain with the tab selected before the listing starts, so nothing here
+// touches a widget while the listing's answer can (#333).
+func (u *ui) openWorkspace() {
+	u.showTabs()
+
+	if u.web != nil {
+		u.web.forget()
+	}
+
+	u.setWorkspace(u.account.content())
+	u.addWorkspaceTab()
+	u.updateSessionButton()
+
+	if u.tabs != nil {
+		u.tabs.Select(u.workspaceTab)
+	}
+
+	u.account.reload()
+}
+
+// showLogin prepares the login card. It does not put it on show: Log in does,
+// or a session that ended does.
 func (u *ui) showLogin(message string) {
 	u.showLoginWith(message, statusIdle)
 }
@@ -451,45 +546,73 @@ func (u *ui) showLogin(message string) {
 // could not be forgotten is an error, and the card should not say it in the
 // same grey as "you are signed out".
 func (u *ui) showLoginWith(message string, kind statusKind) {
-	u.setAccountTab(newLoginView(u, message, kind).content())
-	u.updateAccountButton()
+	u.setLoginCard(newLoginView(u, message, kind).content())
+	u.updateSessionButton()
+
+	if u.client.Token == "" {
+		u.removeWorkspaceTab()
+	}
 }
 
-// showUnreachable puts My Account's "cannot reach" panel in place. The
-// session is kept: a server that is not there has said nothing about the token.
+// showUnreachable puts Workspace's "cannot reach" panel in place. The session
+// is kept: a server that is not there has said nothing about the token.
 func (u *ui) showUnreachable(address string, cause error) {
 	content := u.account.unreachableContent(address, cause)
-	u.setAccountTab(content)
+	u.setWorkspace(content)
 
 	// The panel's card is measured before it has a width, and a sentence that
 	// wraps is taller than one line: lay it out again now that it has one.
 	relayout(content)
 }
 
-// setAccountTab replaces what the account screen shows: the login card, the
-// account, or the unreachable panel. The tabs stay as they are, so the Local
-// server tab keeps its log and its status across a sign-in or a sign-out.
-func (u *ui) setAccountTab(content fyne.CanvasObject) {
-	u.accountBody.Objects = []fyne.CanvasObject{content}
-	u.accountBody.Refresh()
+// setLoginCard replaces the login screen's card.
+func (u *ui) setLoginCard(content fyne.CanvasObject) {
+	if u.loginBody == nil {
+		return
+	}
+
+	u.loginBody.Objects = []fyne.CanvasObject{content}
+	u.loginBody.Refresh()
+}
+
+// setWorkspace replaces what Workspace shows: the account, or the unreachable
+// panel.
+func (u *ui) setWorkspace(content fyne.CanvasObject) {
+	if u.workspaceBody == nil {
+		return
+	}
+
+	u.workspaceBody.Objects = []fyne.CanvasObject{content}
+	u.workspaceBody.Refresh()
 }
 
 // sessionEnded is what a refused token says. The API answered — with "not a
 // session I issued" — so the window stops pretending and asks again.
-const sessionEnded = "Your session ended. Sign in again."
+const sessionEnded = "Your session ended. Log in again."
 
 // signOut forgets the session token and only the token: the API address and
-// the git-host tokens stay. The catalogue is per account, so it is dropped too:
-// a signed-out window should not keep showing a private template.
+// the git-host tokens stay. The window stays on its tabs, without Workspace.
 func (u *ui) signOut() {
-	u.forgetSession("You are signed out.")
+	u.endSession("You are logged out.", false)
+
+	// Explore named owners only with a session; the window lands on it.
+	u.reloadExploreLast()
 }
 
-// forgetSession is signOut for a caller with its own sentence: the API refused
-// the token, and the reason belongs on the card rather than in a log.
+// forgetSession ends a session the API refused, and puts the login card on
+// show with the reason: a session that ended behind the tabs would otherwise
+// end silently.
 func (u *ui) forgetSession(message string) {
+	u.endSession(message, true)
+	u.reloadExploreLast()
+}
+
+// endSession forgets the token, drops what belonged to the session, and leaves
+// the login card ready with message. show puts it on show.
+func (u *ui) endSession(message string, show bool) {
 	if err := config.Remove("token"); err != nil {
 		u.showLoginWith("The session could not be forgotten: "+err.Error(), statusError)
+		u.showScreen(u.loginScreen)
 		return
 	}
 
@@ -506,10 +629,11 @@ func (u *ui) forgetSession(message string) {
 		u.web.forget()
 	}
 
-	// The login card says why, so it is put on show: a session that ended
-	// while the tabs were up would otherwise end silently behind them.
 	u.showLogin(message)
-	u.showAccount()
+
+	if show {
+		u.showScreen(u.loginScreen)
+	}
 }
 
 // copyToClipboard puts text where a person can paste it. It reports whether a

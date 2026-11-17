@@ -168,7 +168,7 @@ func (l *loginView) toggleMode() {
 
 	l.signup = !l.signup
 	l.setStatus("", statusIdle)
-	l.ui.setAccountTab(l.content())
+	l.ui.setLoginCard(l.content())
 }
 
 // setStatus writes the line under the form, in the colour its kind earns: a
@@ -269,7 +269,7 @@ func (l *loginView) submit() {
 
 			l.ui.address = apiChoice{url: base, source: source}
 			l.ui.client = apiclient.New(base).WithToken(token)
-			l.ui.showMain()
+			l.ui.openWorkspace()
 		})
 	})
 }

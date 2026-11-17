@@ -20,7 +20,7 @@ import (
 	"github.com/fiwon123/eznit/internal/domain/templates"
 )
 
-// The Web and My Account tabs share one shape (#373): a filter, a list of whole
+// The Web and Workspace tabs share one shape (#373): a filter, a list of whole
 // rows with a Download button on the right, and a detail page with Back. A
 // table selected one cell at a time, and a cell said nothing the row did not.
 
@@ -95,7 +95,7 @@ func visibilityOf(public bool) string {
 }
 
 // templateEntry is a template row. withVisibility adds "private"/"shared",
-// which the account tab needs and the Web tab — public only — does not.
+// which the account tab needs and Explore — public only — does not.
 func templateEntry(item templates.TemplateData, withVisibility bool) entry {
 	info := fmt.Sprintf("Template · %s · version %d · %d file(s)", item.Kind, item.Version, item.FileCount)
 	if withVisibility {
@@ -115,7 +115,7 @@ func ownFileEntry(file apiclient.File) entry {
 	}
 }
 
-// sharedFileEntry is a row of the Web tab's shared files.
+// sharedFileEntry is a row of Explore's shared files.
 func sharedFileEntry(file apiclient.SharedFile) entry {
 	return entry{
 		kind:  entryFile,
@@ -400,7 +400,7 @@ func newPreview(text string) (*widget.Label, fyne.CanvasObject) {
 
 // fileFacts is a file's details: one fact per line, every one selectable. The
 // visibility is a dropdown on the owner's page, so it is a line only on the
-// Web tab's.
+// Explore's.
 func fileFacts(file apiclient.File, owner string) *prose {
 	lines := []string{
 		"Name: " + fileName(file),
@@ -417,7 +417,7 @@ func fileFacts(file apiclient.File, owner string) *prose {
 // filePage is one file's page (#376): its details with any controls the page
 // adds under them, and a preview of its start so a person knows what a
 // download holds. The preview is read in the background; owner is empty on
-// My Account, where the file is the reader's own. The page is pushed onto
+// Workspace, where the file is the reader's own. The page is pushed onto
 // pages and returned.
 func filePage(u *ui, pages *pager, file apiclient.File, owner string, controls []fyne.CanvasObject, primary []fyne.CanvasObject, danger ...fyne.CanvasObject) fyne.CanvasObject {
 	details := container.NewVBox(heading("Details"), fileFacts(file, owner))

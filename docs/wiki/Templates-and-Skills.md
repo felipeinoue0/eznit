@@ -46,9 +46,9 @@ file into a template:
 | | Sharing a file | Publishing a template |
 | --- | --- | --- |
 | Covers | one file | a whole folder |
-| How | **Visibility → Public** on the file's page in My Account, or `eznit share` | **Publish template…** on My Account, **New template** on the web page, or `eznit template publish ./folder` |
+| How | **Visibility → Public** on the file's page in Workspace, or `eznit share` | **Publish template…** in Workspace, **New template** on the web page, or `eznit template publish ./folder` |
 | Does | makes that one file downloadable by anyone on the instance | adds the folder to the catalogue with a name, a kind and its `{{variables}}` |
-| In the catalogue | no — listed as a file on the **Web** tab (and the web page's Explore), visible without an account | yes |
+| In the catalogue | no — listed as a file on the **Explore** tab (and the web page's Explore), visible without an account | yes |
 
 So a shared file is never listed as a template — the window's Templates / Files
 filter keeps them apart — and no kind filter can make it one: the filter lists **template kinds** (`opencode`, `codex`,
@@ -56,13 +56,13 @@ filter keeps them apart — and no kind filter can make it one: the filter lists
 `powershell`), and **All kinds** means "no filter". It is not a list of your
 files.
 
-To publish one from the window, press **Publish template…** on My Account,
+To publish one from the window, press **Publish template…** in Workspace,
 pick the folder, and fill in the form: name (the folder's by default), kind,
 a description (a few lines, scrolling past them), Visibility (Private by
 default), and a default for each `{{PLACEHOLDER}}` the files use (an
 empty default makes it a question asked on every apply). It uses the same
 folder walk as the CLI, so `.git`, `node_modules` and the like are left out,
-and a file that is too big is named. The button is on My Account, so it needs a
+and a file that is too big is named. The button is in Workspace, so it needs a
 session.
 
 From a terminal, point the command at the folder and answer its prompts:
@@ -73,11 +73,11 @@ eznit login
 eznit template publish ./demo --public
 ```
 
-A template you own changes visibility from its page in My Account — the
+A template you own changes visibility from its page in Workspace — the
 **Visibility** dropdown, after a confirmation. Its **Files** tab shows the
 folder it writes as a tree, with a preview of the selected file.
 
-Then press **Refresh** on the window's Web tab (or My Account, for a private
+Then press **Refresh** on the window's Explore tab (or Workspace, for a private
 one). The window browses, shows, exports, applies and publishes templates.
 
 ## 📤 Publish, list, show, apply

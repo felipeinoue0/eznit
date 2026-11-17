@@ -17,8 +17,8 @@ import (
 	"github.com/fiwon123/eznit/internal/domain/templates"
 )
 
-// accountView is My Account (#373): the signed-in account's own files and
-// templates in one list, the same rows as the Web tab, and the two ways to add
+// accountView is Workspace (#373): the signed-in account's own files and
+// templates in one list, the same rows as Explore, and the two ways to add
 // one — upload a file, publish a template folder. Opening a row gives it a page
 // of its own, with Back.
 //
@@ -411,7 +411,7 @@ func (v *accountView) setFileVisibility(file *apiclient.File, public bool, rever
 
 			file.IsPublic = public
 			if public {
-				v.afterLoad = name + " is public: it is on the Web tab now."
+				v.afterLoad = name + " is public: it is on Explore now."
 			} else {
 				v.afterLoad = name + " is private again."
 			}
