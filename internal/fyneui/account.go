@@ -10,7 +10,6 @@ import (
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
-	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
@@ -39,15 +38,12 @@ type accountView struct {
 	// publish reloads the list, and its confirmation must not be replaced.
 	afterLoad string
 
-	show    *widget.RadioGroup
+	show    *widget.Select
 	list    *entryList
 	pages   *pager
 	upload  *widget.Button
 	publish *widget.Button
 	refresh *widget.Button
-
-	// bar is the API address, with Sign out: the session belongs here.
-	bar *addressBar
 
 	status *prose
 	dot    *canvas.Circle
@@ -70,23 +66,24 @@ func newAccountView(u *ui) *accountView {
 	return view
 }
 
-// content is the signed-in tab. It is rebuilt on every sign-in, so the bar
-// shows the current address and the list starts on its own page.
+// content is the signed-in account (#376): what it holds and how to add to
+// it on top, the list, and the status line — inside the page margins. The
+// server is chosen on the Settings tab.
 func (v *accountView) content() fyne.CanvasObject {
-	v.bar = newAddressBar(v.ui, v.setStatus, true)
-
 	v.dot = canvas.NewCircle(statusColour(v.ui.app.Settings().ThemeVariant(), statusIdle))
 
-	filters := container.NewHBox(muted("Show"), v.show, layout.NewSpacer(), v.upload, v.publish, v.refresh)
-	top := container.NewVBox(container.NewPadded(filters), widget.NewSeparator())
+	title := container.NewBorder(nil, nil, nil, v.refresh, heading("Your files and templates"))
+	filters := container.NewBorder(nil, nil,
+		container.NewHBox(widget.NewLabel("Show"), v.show),
+		container.NewHBox(v.upload, v.publish))
+	top := container.NewVBox(title, filters, widget.NewSeparator())
 	v.pages = newPager(container.NewBorder(top, nil, nil, nil, v.list.list))
 
 	// A rebuilt view has not listed anything yet.
 	v.ready = false
 	v.updateActions()
 
-	head := container.NewVBox(v.bar.content(), widget.NewSeparator())
-	v.built = container.NewBorder(head, statusBar(v.dot, v.status), nil, nil, v.pages.stack)
+	v.built = inset(container.NewBorder(nil, statusBar(v.dot, v.status), nil, nil, v.pages.stack))
 
 	return v.built
 }
@@ -215,16 +212,12 @@ func (v *accountView) failedToLoad(address string, err error) {
 	v.ui.showUnreachable(address, err)
 }
 
-// unreachableContent is the tab when the server did not answer: the same
-// address bar — so another address can be typed and connected — the panel that
-// explains the state, and a status line of its own.
+// unreachableContent is the account when the server did not answer: the panel
+// that explains the state, and a status line of its own.
 func (v *accountView) unreachableContent(address string, cause error) fyne.CanvasObject {
 	panel := newUnreachableView(v.ui, address, cause)
 
-	v.bar = newAddressBar(v.ui, panel.setStatus, true)
-	header := container.NewVBox(v.bar.content(), widget.NewSeparator())
-
-	return container.NewBorder(header, statusBar(panel.dot, panel.status), nil, nil, panel.content())
+	return inset(container.NewBorder(nil, statusBar(panel.dot, panel.status), nil, nil, panel.content()))
 }
 
 // forget drops the rows. They belong to the session that just ended, and the
@@ -244,16 +237,23 @@ func (v *accountView) forget() {
 // open shows one row's page.
 func (v *accountView) open(item entry) {
 	if item.kind == entryTemplate {
-		openTemplate(v.ui, v.pages, item.template, v.setStatus)
+		openTemplate(v.ui, v.pages, item.template, v.setStatus, true, func(note string) {
+			v.afterLoad = note
+			v.reload()
+		})
 		return
 	}
 
 	v.openFile(item.file)
 }
 
-// openFile is a file's page: what it is, and everything that can be done to it.
-func (v *accountView) openFile(file apiclient.File) {
-	name := fileName(file)
+// openFile is a file's page: its details with the Visibility dropdown and the
+// two copies, a preview, Download at the top and Delete apart at the bottom.
+func (v *accountView) openFile(opened apiclient.File) {
+	// The page's buttons read the file through one pointer, so a visibility
+	// change made on the page is what Copy details copies afterwards.
+	file := &opened
+	name := fileName(opened)
 
 	copyName := widget.NewButton("Copy name", func() {
 		if !v.ui.copyToClipboard(name) {
@@ -263,30 +263,31 @@ func (v *accountView) openFile(file apiclient.File) {
 		v.setStatus("Copied the name of "+name+".", statusOK)
 	})
 	copyDetails := widget.NewButton("Copy details", func() {
-		if !v.ui.copyToClipboard(fileRecord(file)) {
+		if !v.ui.copyToClipboard(fileRecord(*file)) {
 			v.setStatus("This window has no clipboard available — the details could not be copied.", statusError)
 			return
 		}
 		v.setStatus("Copied the details of "+name+".", statusOK)
 	})
 
-	shareText := "Share"
-	if file.IsPublic {
-		shareText = "Unshare"
-	}
-	share := widget.NewButton(shareText, func() { v.toggleShare(file) })
+	visibility := newVisibilitySelect(file.IsPublic, func(public bool, revert func()) {
+		v.askFileVisibility(file, public, revert)
+	})
 
-	remove := widget.NewButtonWithIcon("Delete", theme.DeleteIcon(), func() { v.deleteFile(file) })
+	remove := widget.NewButtonWithIcon("Delete", theme.DeleteIcon(), func() { v.deleteFile(*file) })
 	remove.Importance = widget.DangerImportance
 
 	download := widget.NewButtonWithIcon("Download…", theme.DownloadIcon(), func() {
-		downloadFile(v.ui, file, v.setStatus)
+		downloadFile(v.ui, *file, v.setStatus)
 	})
 	download.Importance = widget.HighImportance
 
-	body := container.NewVScroll(container.NewPadded(fileFacts(file, "")))
-	v.pages.push(detailPage(name, v.pages.back, body,
-		copyName, copyDetails, widget.NewSeparator(), share, remove, download))
+	controls := []fyne.CanvasObject{
+		widget.NewLabel("Visibility"), visibility,
+		widget.NewSeparator(), copyName, copyDetails,
+	}
+
+	filePage(v.ui, v.pages, opened, "", controls, []fyne.CanvasObject{download}, remove)
 }
 
 // download is a row's own Download button.
@@ -346,9 +347,9 @@ func (v *accountView) uploadFile() {
 func (v *accountView) deleteFile(file apiclient.File) {
 	name := fileName(file)
 
-	dialog.ShowConfirm("Delete "+name,
-		"This removes the file from the server. It cannot be undone.",
-		func(confirmed bool) {
+	confirm(v.ui, "Delete "+name+"?",
+		fmt.Sprintf("This removes %q from the server, with every version of it. It cannot be undone.", name),
+		"Delete", func(confirmed bool) {
 			if !confirmed {
 				return
 			}
@@ -371,50 +372,50 @@ func (v *accountView) deleteFile(file apiclient.File) {
 					v.reload()
 				})
 			})
-		}, v.ui.window)
+		})
 }
 
-func (v *accountView) toggleShare(file apiclient.File) {
-	name := fileName(file)
+// askFileVisibility confirms a change of visibility before it is sent (#376).
+func (v *accountView) askFileVisibility(file *apiclient.File, public bool, revert func()) {
+	title, message, action := visibilityQuestion("file", fileName(*file), public)
 
-	apply := func(public bool) {
-		v.setStatus("Updating "+name+"…", statusPending)
+	confirm(v.ui, title, message, action, func(confirmed bool) {
+		if !confirmed {
+			revert()
+			return
+		}
+		v.setFileVisibility(file, public, revert)
+	})
+}
 
-		client := v.ui.client
+// setFileVisibility sends the change. The page stays: its dropdown already
+// shows the new state, and the list behind it reloads. A refusal puts the
+// dropdown back.
+func (v *accountView) setFileVisibility(file *apiclient.File, public bool, revert func()) {
+	name := fileName(*file)
+	id := file.ID
 
-		v.ui.background(func() {
-			err := client.SetFilePublic(file.ID, public)
+	v.setStatus("Changing the visibility of "+name+"…", statusPending)
 
-			fyne.Do(func() {
-				if err != nil {
-					v.setStatus("The change failed: "+messageOf(err), statusError)
-					return
-				}
+	client := v.ui.client
 
-				// The page stays open with the new state; the list behind it
-				// is reloaded.
-				file.IsPublic = public
-				if public {
-					v.afterLoad = name + " is shared: it is on the Web tab now."
-				} else {
-					v.afterLoad = name + " is private again."
-				}
-				v.openFile(file)
-				v.reload()
-			})
-		})
-	}
+	v.ui.background(func() {
+		err := client.SetFilePublic(id, public)
 
-	if file.IsPublic {
-		apply(false)
-		return
-	}
-
-	dialog.ShowConfirm("Share "+name,
-		"Anyone on this server will be able to download it from the Web tab.\n\nThis shares one file. It does not publish a template: a template is a whole folder, published with Publish template….",
-		func(confirmed bool) {
-			if confirmed {
-				apply(true)
+		fyne.Do(func() {
+			if err != nil {
+				revert()
+				v.setStatus("The visibility did not change: "+messageOf(err), statusError)
+				return
 			}
-		}, v.ui.window)
+
+			file.IsPublic = public
+			if public {
+				v.afterLoad = name + " is public: it is on the Web tab now."
+			} else {
+				v.afterLoad = name + " is private again."
+			}
+			v.reload()
+		})
+	})
 }

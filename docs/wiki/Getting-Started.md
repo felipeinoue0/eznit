@@ -120,14 +120,15 @@ run is:
 2. **Server → Start**: the tab brings up the database and applies the migrations
    through the folder's own Compose services when nothing answers, then starts
    the API. The Output tab shows the log; the status dot turns green;
-3. **Files**: **Use this machine** is checked by default, so **Test**, then
-   **Connect**, and create the first account — it is the instance's admin.
+3. **Settings**: **Use this machine** is checked by default, so **Test**, then
+   **Connect**; then **Sign in** (top right) and create the first account — it
+   is the instance's admin.
 
 If you prefer the terminal, `docker compose up -d db migrate` in that folder does
 the same thing, and **Start** only runs the migrations.
 
 The window is also a client of a server somewhere else, and that needs no bundle:
-type the address into the **Files** header, **Test** it, **Connect**. The Server
+type the address on the **Settings** tab, **Test** it, **Connect**. The Server
 tab is not involved.
 
 `RUNNING.md` in the bundle says the same, and what it does not prove.

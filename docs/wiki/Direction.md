@@ -37,9 +37,9 @@ machine next to it is solving the wrong problem.
   repositories ([#188](https://github.com/fiwon123/eznit/issues/188), v0.18.0);
   a token never reaches the API.
 - A git-host token stays on the CLI machine, one config key per host.
-- **The desktop window names its server** — each tab shows the address it
-  talks to and where that address came from. One address bar serves the Web
-  and My Account tabs: **Use this machine** (remembered, checked by default) or a
+- **The desktop window names its server** — the Settings tab shows the address
+  it talks to and where that address came from, and is the one place to change
+  it: **Use this machine** (remembered, checked by default) or a
   typed address, with **Test** and **Connect** ([#248](https://github.com/fiwon123/eznit/issues/248),
   v0.25.0; editable and shared since v0.30.0). A different host signs you out,
   because a session belongs to the server that issued it.
@@ -59,6 +59,12 @@ machine next to it is solving the wrong problem.
   (first) lists public templates and shared files, **My Account** the
   account's own, both with a Templates / Files / All filter, whole-row
   selection, a Download on every row and a page with **Back** per item.
+- **Settings, account button, previews** ([#376](https://github.com/fiwon123/eznit/issues/376),
+  v0.36.0) — tabs Web · Local server · Settings · About with **My Account** as
+  a button at the right of the bar; the server chosen on Settings only; a
+  dropdown filter; a template's files as a folder tree with a preview; a file
+  previewed before download; your own files and templates switch Private ↔
+  Public after a confirmation.
 
 ## 📱 Device-to-device over cthrone — not implemented
 

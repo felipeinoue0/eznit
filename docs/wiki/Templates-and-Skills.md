@@ -46,7 +46,7 @@ file into a template:
 | | Sharing a file | Publishing a template |
 | --- | --- | --- |
 | Covers | one file | a whole folder |
-| How | **Share** on the file's page in My Account, or `eznit share` | **Publish template…** on My Account, **New template** on the web page, or `eznit template publish ./folder` |
+| How | **Visibility → Public** on the file's page in My Account, or `eznit share` | **Publish template…** on My Account, **New template** on the web page, or `eznit template publish ./folder` |
 | Does | makes that one file downloadable by anyone on the instance | adds the folder to the catalogue with a name, a kind and its `{{variables}}` |
 | In the catalogue | no — listed as a file on the **Web** tab (and the web page's Explore), visible without an account | yes |
 
@@ -58,7 +58,8 @@ files.
 
 To publish one from the window, press **Publish template…** on My Account,
 pick the folder, and fill in the form: name (the folder's by default), kind,
-description, Public, and a default for each `{{PLACEHOLDER}}` the files use (an
+a description (a few lines, scrolling past them), Visibility (Private by
+default), and a default for each `{{PLACEHOLDER}}` the files use (an
 empty default makes it a question asked on every apply). It uses the same
 folder walk as the CLI, so `.git`, `node_modules` and the like are left out,
 and a file that is too big is named. The button is on My Account, so it needs a
@@ -71,6 +72,10 @@ eznit template init --kind opencode --target ./demo   # a starter, no server nee
 eznit login
 eznit template publish ./demo --public
 ```
+
+A template you own changes visibility from its page in My Account — the
+**Visibility** dropdown, after a confirmation. Its **Files** tab shows the
+folder it writes as a tree, with a preview of the selected file.
 
 Then press **Refresh** on the window's Web tab (or My Account, for a private
 one). The window browses, shows, exports, applies and publishes templates.

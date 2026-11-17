@@ -20,7 +20,12 @@ func TestTabsHaveOnePrimaryAction(t *testing.T) {
 	for name, want := range map[string]int{"My Account": 1, "Web": 0} {
 		primary := 0
 
-		for _, button := range allButtons(tabNamed(t, u, name).Content) {
+		root := u.account.built
+		if name == "Web" {
+			root = tabNamed(t, u, name).Content
+		}
+
+		for _, button := range allButtons(root) {
 			if !button.Hidden && button.Importance == widget.HighImportance {
 				primary++
 			}

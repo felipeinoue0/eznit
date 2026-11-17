@@ -338,6 +338,41 @@ func (c *Client) DownloadFile(id string, dest string) (string, error) {
 	return target, nil
 }
 
+// PreviewFile reads at most limit bytes from the start of a file, so a person
+// can see what a download holds before saving it. more reports whether the file
+// goes on past what was read.
+func (c *Client) PreviewFile(id string, limit int64) (content []byte, more bool, err error) {
+	request, err := http.NewRequest(http.MethodGet,
+		c.BaseURL+"/v1/files/"+url.PathEscape(id)+"/content", nil)
+	if err != nil {
+		return nil, false, fmt.Errorf("build the request: %w", err)
+	}
+
+	c.authorize(request)
+
+	response, err := c.HTTP.Do(request)
+	if err != nil {
+		return nil, false, fmt.Errorf("%w: %w", ErrUnreachable, err)
+	}
+	defer response.Body.Close()
+
+	if response.StatusCode != http.StatusOK {
+		return nil, false, decodeError(response)
+	}
+
+	// One byte past the limit says whether there is more, without reading it.
+	content, err = io.ReadAll(io.LimitReader(response.Body, limit+1))
+	if err != nil {
+		return nil, false, fmt.Errorf("read the file: %w", err)
+	}
+
+	if int64(len(content)) > limit {
+		return content[:limit], true, nil
+	}
+
+	return content, false, nil
+}
+
 // DeleteFile removes one of the caller's files.
 func (c *Client) DeleteFile(id string) error {
 	request, err := http.NewRequest(http.MethodDelete,

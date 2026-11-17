@@ -305,7 +305,7 @@ func TestServerViewSaysWhenTheFolderIsNotABundle(t *testing.T) {
 		t.Error("Create .env is offered although there is no example to copy")
 	}
 
-	for _, want := range []string{"not a server bundle", serverctl.BinaryName(), "release archive", "My Account"} {
+	for _, want := range []string{"not a server bundle", serverctl.BinaryName(), "release archive", "Settings tab"} {
 		if !strings.Contains(view.note.Text, want) {
 			t.Errorf("note = %q, want it to mention %q", view.note.Text, want)
 		}

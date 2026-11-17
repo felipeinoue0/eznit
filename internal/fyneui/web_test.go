@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	"fyne.io/fyne/v2/test"
+
 	"github.com/fiwon123/eznit/internal/apiclient"
 )
 
@@ -102,6 +104,7 @@ func TestWebFileOpensAPage(t *testing.T) {
 
 	u.web.show.SetSelected(showFiles)
 	u.web.list.list.Select(0)
+	u.settle()
 
 	if u.web.pages.atHome() {
 		t.Fatal("tapping the row did not open its page")
@@ -170,7 +173,7 @@ func TestWebTabRefusedTokenEndsTheSession(t *testing.T) {
 	u.web.reload()
 	u.settle()
 
-	if findButton(u.accountTab.Content, "Log in") == nil {
+	if findButton(u.accountBody.Objects[0], "Log in") == nil {
 		t.Fatal("a refused token did not bring the login card back")
 	}
 	if u.client.Token != "" {
@@ -185,7 +188,8 @@ func TestWebTabRefusedTokenEndsTheSession(t *testing.T) {
 	}
 }
 
-// The tabs are Web first, then My Account, Local server and About (#373).
+// The tabs are Web first, then Local server, Settings and About; My Account is
+// a button at the far right of the bar, named by the session (#376).
 func TestTabOrder(t *testing.T) {
 	u := newTestUI(t)
 
@@ -194,8 +198,28 @@ func TestTabOrder(t *testing.T) {
 		titles = append(titles, item.Text)
 	}
 
-	if got := strings.Join(titles, ","); got != "Web,My Account,About" {
-		t.Errorf("tabs = %q, want Web first and My Account second (no Local server in the test window)", got)
+	if got := strings.Join(titles, ","); got != "Web,Settings,About" {
+		t.Errorf("tabs = %q, want Web, Settings, About (no Local server in the test window)", got)
+	}
+
+	if u.accountButton.Text != "Sign in" {
+		t.Errorf("account button = %q without a session, want Sign in", u.accountButton.Text)
+	}
+
+	u.client = u.client.WithToken("the-token")
+	u.updateAccountButton()
+	if u.accountButton.Text != "My Account" {
+		t.Errorf("account button = %q with a session, want My Account", u.accountButton.Text)
+	}
+
+	test.Tap(u.accountButton)
+	if !u.accountShown() {
+		t.Fatal("the account button did not open the account screen")
+	}
+
+	test.Tap(findButton(u.accountScreen, "Close"))
+	if u.accountShown() {
+		t.Error("Close did not return to the tabs")
 	}
 	if u.tabs.Selected() != u.webTab {
 		t.Error("the window does not open on the Web tab")

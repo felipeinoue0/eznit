@@ -23,16 +23,16 @@ import (
 // the tab has at the window's default 980x640.
 const (
 	loginWidth  float32 = 440
-	loginHeight float32 = 590
+	loginHeight float32 = 540
 )
 
 // loginView is the sign-in and account-creation form. It is one form with a
-// mode: the fields stay put when the mode changes, so a typo in the address is
-// not lost.
+// mode: the fields stay put when the mode changes, so a typed address is not
+// lost. The server is not one of its fields (#376): it is chosen on the
+// Settings tab, and the card names it with a way there.
 type loginView struct {
 	ui      *ui
-	local   *checkRow
-	api     *widget.Entry
+	server  *widget.Label
 	email   *widget.Entry
 	pass    *widget.Entry
 	confirm *widget.Entry
@@ -49,8 +49,7 @@ type loginView struct {
 func newLoginView(u *ui, message string, kind statusKind) *loginView {
 	view := &loginView{
 		ui:      u,
-		local:   newCheckRow("Use this machine", nil),
-		api:     widget.NewEntry(),
+		server:  oneLine(u.currentAddress()),
 		email:   widget.NewEntry(),
 		pass:    widget.NewPasswordEntry(),
 		confirm: widget.NewPasswordEntry(),
@@ -59,9 +58,6 @@ func newLoginView(u *ui, message string, kind statusKind) *loginView {
 	}
 
 	view.setStatus(message, kind)
-	view.local.SetChecked(u.local)
-	view.local.OnChanged = func(bool) { view.syncServerField() }
-	view.syncServerField()
 
 	view.email.SetPlaceHolder("you@example.com")
 	view.pass.SetPlaceHolder("your password")
@@ -69,7 +65,7 @@ func newLoginView(u *ui, message string, kind statusKind) *loginView {
 
 	// Enter submits from any field: the form's own button is gone, and a
 	// person typing a password expects the key to finish the job.
-	for _, entry := range []*widget.Entry{view.api, view.email, view.pass, view.confirm} {
+	for _, entry := range []*widget.Entry{view.email, view.pass, view.confirm} {
 		entry.OnSubmitted = func(string) { view.submit() }
 	}
 
@@ -87,20 +83,6 @@ func signupHint() *widget.Label {
 	return label
 }
 
-// syncServerField shows this machine's address, or the one typed, according to
-// the checkbox — the same choice the tabs' bars offer.
-func (l *loginView) syncServerField() {
-	if l.local.Checked {
-		l.api.SetText(l.ui.localAddress())
-		l.api.Disable()
-
-		return
-	}
-
-	l.api.SetText(l.ui.address.url)
-	l.api.Enable()
-}
-
 func (l *loginView) content() fyne.CanvasObject {
 	logo := canvas.NewImageFromResource(logoResource())
 	logo.FillMode = canvas.ImageFillContain
@@ -113,10 +95,11 @@ func (l *loginView) content() fyne.CanvasObject {
 		fyne.TextAlignCenter, fyne.TextStyle{})
 	subtitle.Selectable = true
 
-	// The address takes the card's width and the local choice sits under it:
-	// side by side inside a 440 px card the checkbox left the field about
-	// 170 px, which clips almost every address (#325).
-	serverRow := container.NewVBox(l.api, l.local.row)
+	// The server is named, not asked for: Settings is where it changes, and
+	// the button goes there.
+	change := widget.NewButton("Change in Settings", l.ui.openSettings)
+	change.Importance = widget.LowImportance
+	serverRow := container.NewBorder(nil, nil, nil, change, l.server)
 
 	rows := []formRow{
 		{caption: "Server", input: serverRow},
@@ -218,26 +201,14 @@ func (l *loginView) submit() {
 		return
 	}
 
-	typed := l.api.Text
-	source := "the address you entered"
-	if l.local.Checked {
-		typed = l.ui.localAddress()
+	source := l.ui.address.source
+	if l.ui.local {
 		source = localSource
 	}
 
-	base, err := apiclient.ValidateBaseURL(typed)
+	base, err := apiclient.ValidateBaseURL(l.ui.currentAddress())
 	if err != nil {
-		l.setStatus(err.Error(), statusError)
-		return
-	}
-
-	if err := l.ui.setLocal(l.local.Checked); err != nil {
-		l.setStatus("The choice of server could not be saved: "+err.Error(), statusError)
-		return
-	}
-
-	if err := config.Set("api_url", base); err != nil {
-		l.setStatus("The server address could not be saved: "+err.Error(), statusError)
+		l.setStatus(err.Error()+" Choose the server in Settings.", statusError)
 		return
 	}
 
@@ -246,7 +217,6 @@ func (l *loginView) submit() {
 
 	signup := l.signup
 	confirm := l.confirm.Text
-	local := l.local.Checked
 
 	l.ui.background(func() {
 		client := apiclient.New(base)
@@ -297,7 +267,6 @@ func (l *loginView) submit() {
 				return
 			}
 
-			l.ui.local = local
 			l.ui.address = apiChoice{url: base, source: source}
 			l.ui.client = apiclient.New(base).WithToken(token)
 			l.ui.showMain()
