@@ -69,11 +69,11 @@ path: it writes a starter into a folder with no server and no account. Full
 flags: [CLI Reference](https://github.com/fiwon123/eznit/wiki/CLI-Reference).
 
 A **template is a folder** — `template publish`, **Publish template…** on the
-desktop window's My Account screen, or **New template** on the web page sends
+desktop window's **Workspace** tab, or **New template** on the web page sends
 the whole folder to the catalogue. Sharing a file (`eznit share`, or
-**Visibility → Public** on the file's page in My Account) only makes that one file downloadable; it does
+**Visibility → Public** on the file's page in Workspace) only makes that one file downloadable; it does
 not add anything to Templates. Public templates and shared files are listed on
-the window's **Web** tab and on the web page's Explore — both work without an
+the window's **Explore** tab and on the web page's Explore — both work without an
 account.
 
 | | Web page | Desktop window | CLI |
@@ -81,7 +81,7 @@ account.
 | Browse, download, apply templates (no account needed) | ✅ | ✅ | ✅ |
 | Publish a template | ✅ New template | ✅ Publish template… | ✅ `template publish` |
 | Upload, download, share your files | ✅ | ✅ | ✅ |
-| Download files others shared (no account needed) | ✅ Explore | ✅ Web tab | ✅ `download` |
+| Download files others shared (no account needed) | ✅ Explore | ✅ Explore | ✅ `download` |
 
 ### 🌐 Web UI
 
@@ -185,11 +185,12 @@ cd eznit_<tag>_linux_amd64
 ./eznit-gui                                    # the window, from inside the bundle
 ```
 
-Run the window **from inside the extracted folder**: the Local server tab looks for
-`eznit` beside it. The window is a client first — type any eznit API into the **Files**
-header and **Connect** — and a host second: the Local server tab runs the server in
-that folder. Its first run is **Server → Configuration → Create .env → set the
-database password → Save → Start**: **Start** brings up the database and applies
+Run the window **from inside the extracted folder**: **Settings → Local server**
+looks for `eznit` beside it. The window is a client first — type any eznit API
+into **Settings → Server** and **Connect** — and a host second: **Settings →
+Local server** runs the server in that folder. Its first run is **Settings →
+Local server → Configuration → Create .env → set the database password → Save →
+Start**: **Start** brings up the database and applies
 the migrations through the folder's own Compose services when nothing answers, so
 the database does not need a terminal step. Without the window, `./eznit` is the
 CLI and `./eznit serve` is the API; `RUNNING.md` in the folder has the rest.

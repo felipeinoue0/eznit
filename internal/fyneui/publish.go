@@ -26,7 +26,7 @@ import (
 
 // publishSignedOut is what the button says without a session. Browsing and
 // applying need no account; publishing puts something on the server under one.
-const publishSignedOut = "Sign in on My Account to publish a template. Browsing and applying need no account."
+const publishSignedOut = "Log in to publish a template. Browsing and applying need no account."
 
 // publishForm is what a person fills in; buildPublishRequest turns it and the
 // collected files into the API's request.

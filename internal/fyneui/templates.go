@@ -23,10 +23,10 @@ import (
 // `eznit template apply --from-file` reads.
 const bundleExtension = ".eznit"
 
-// templatePage is one opened template, on the Web tab or on My Account: its
+// templatePage is one opened template, on Explore or on Workspace: its
 // summary, its files as the folder they write with a preview of the selected
 // one, its variables and commands, and the two actions that take it away —
-// Save as bundle and Apply. On My Account it also has a Visibility dropdown.
+// Save as bundle and Apply. On Workspace it also has a Visibility dropdown.
 type templatePage struct {
 	ui     *ui
 	report func(text string, kind statusKind)
@@ -104,7 +104,7 @@ func (p *templatePage) content(title string, back func()) fyne.CanvasObject {
 }
 
 // openTemplate shows a template's page and fetches the whole template into it.
-// owned pages — My Account's — can change the template's visibility; changed
+// owned pages — Workspace's — can change the template's visibility; changed
 // runs after one does.
 func openTemplate(u *ui, pages *pager, item templates.TemplateData, report func(string, statusKind), owned bool, changed func(note string)) *templatePage {
 	page := newTemplatePage(u, report)
@@ -283,12 +283,12 @@ func (p *templatePage) setVisibility(public bool, revert func()) {
 func visibilityQuestion(kind, name string, public bool) (title, message, action string) {
 	if public {
 		return "Make " + name + " public?",
-			fmt.Sprintf("Anyone who can reach this server will be able to see and download the %s %q from the Web tab, without an account.\n\nYou can make it private again later.", kind, name),
+			fmt.Sprintf("Anyone who can reach this server will be able to see and download the %s %q from Explore, without an account.\n\nYou can make it private again later.", kind, name),
 			"Make public"
 	}
 
 	return "Make " + name + " private?",
-		fmt.Sprintf("The %s %q will leave the Web tab: only you will see it, on My Account. Copies people already downloaded are not affected.", kind, name),
+		fmt.Sprintf("The %s %q will leave Explore: only you will see it, in your Workspace. Copies people already downloaded are not affected.", kind, name),
 		"Make private"
 }
 

@@ -37,7 +37,7 @@ machine next to it is solving the wrong problem.
   repositories ([#188](https://github.com/fiwon123/eznit/issues/188), v0.18.0);
   a token never reaches the API.
 - A git-host token stays on the CLI machine, one config key per host.
-- **The desktop window names its server** — the Settings tab shows the address
+- **The desktop window names its server** — Settings → Server shows the address
   it talks to and where that address came from, and is the one place to change
   it: **Use this machine** (remembered, checked by default) or a
   typed address, with **Test** and **Connect** ([#248](https://github.com/fiwon123/eznit/issues/248),
@@ -65,6 +65,12 @@ machine next to it is solving the wrong problem.
   dropdown filter; a template's files as a folder tree with a preview; a file
   previewed before download; your own files and templates switch Private ↔
   Public after a confirmation.
+- **Explore, Workspace, Settings** ([#379](https://github.com/fiwon123/eznit/issues/379),
+  v0.37.0) — Web is **Explore**; **Workspace** (was My Account) is a tab that
+  appears once logged in; **Log in / Log out**, **Settings** and **About** sit
+  at the right of the bar; Settings holds **Server**, **Local server** and
+  **Reset**, which erases the local server's data after a confirmation and
+  keeps its configuration.
 
 ## 📱 Device-to-device over cthrone — not implemented
 

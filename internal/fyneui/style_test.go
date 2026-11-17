@@ -22,7 +22,7 @@ func TestTabsHaveOnePrimaryAction(t *testing.T) {
 
 		root := u.account.built
 		if name == "Web" {
-			root = tabNamed(t, u, name).Content
+			root = tabNamed(t, u, "Explore").Content
 		}
 
 		for _, button := range allButtons(root) {
@@ -36,7 +36,7 @@ func TestTabsHaveOnePrimaryAction(t *testing.T) {
 		}
 	}
 
-	for _, button := range allButtons(tabNamed(t, u, "About").Content) {
+	for _, button := range allButtons(u.aboutContent()) {
 		if !button.Hidden && button.Importance == widget.HighImportance {
 			t.Errorf("the About tab offers a primary action %q; it is a page, not a form", button.Text)
 		}

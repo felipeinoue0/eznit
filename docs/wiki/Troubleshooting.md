@@ -52,7 +52,7 @@ window in **v0.23.1 and later** is linked inside a Debian 12 image and needs
 only glibc **2.34**; use the CLI (`eznit`, `ez`) in the meantime, which is
 `CGO_ENABLED=0` and unaffected.
 
-## The Local server tab says "not a server bundle"
+## Settings → Local server says "not a server bundle"
 
 The panel runs `eznit serve` from the **binary beside the window**, and the
 folder it is pointed at does not have one. Since v0.24.0 the release publishes **one archive
@@ -62,17 +62,17 @@ archive you already have and run `eznit-gui` from inside it (or point the tab at
 that folder with **Choose folder…**).
 
 The note under the header names what the folder is missing. If you only want to
-use a server that already runs, the Local server tab is not needed — type its address
-into the **Files** header and **Connect**. The README's "From a download, in one
+use a server that already runs, the local server is not needed — type its address
+into **Settings → Server** and **Connect**. The README's "From a download, in one
 minute" block has the same steps.
 
-## The Local server tab says the port is in use
+## Settings → Local server says the port is in use
 
 Something else already listens on `API_PORT` (4000 by default) — often a server
 this window started in another session, or `make run_api`. Stop it, or change
 the port in the configuration panel and save.
 
-## `password authentication failed for user "root"` in the Local server tab
+## `password authentication failed for user "root"` in Settings → Local server
 
 The API reached PostgreSQL and the password did not match. Two causes:
 
@@ -92,7 +92,7 @@ The status dot does not help here: `/v1/healthcheck` answers without touching th
 database, by design, so a green dot says "the process is up", not "the database
 is fine".
 
-## The Local server tab says the database could not be prepared
+## Settings → Local server says the database could not be prepared
 
 The step that runs before **Start** names the piece that is missing:
 

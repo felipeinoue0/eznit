@@ -19,7 +19,7 @@ import (
 )
 
 // localModeKey remembers whether the window talks to this machine. A window
-// that has never chosen is local: the Local server tab is on the same machine, and
+// that has never chosen is local: the local server is on the same machine, and
 // "this machine" is the answer that makes the two tabs agree.
 const localModeKey = "api_local"
 
@@ -43,7 +43,7 @@ type addressBar struct {
 	// report writes the bar's messages where the owning tab shows status.
 	report func(text string, kind statusKind)
 
-	// afterConnect runs after a successful switch; the Web tab reloads
+	// afterConnect runs after a successful switch; Explore reloads
 	// its catalogue from the new server.
 	afterConnect func()
 
@@ -51,7 +51,7 @@ type addressBar struct {
 	syncing bool
 }
 
-// newAddressBar builds the bar. withSignOut is My Account's: the session
+// newAddressBar builds the bar. withSignOut is Workspace's: the session
 // belongs to that tab, so only it offers to end one.
 func newAddressBar(u *ui, report func(text string, kind statusKind), withSignOut bool) *addressBar {
 	bar := &addressBar{ui: u, report: report}
@@ -195,9 +195,9 @@ func (b *addressBar) connectTyped() {
 	choice := apiChoice{url: typed, source: source}
 
 	if b.ui.client.Token != "" && !apiclient.SameHost(b.ui.client.BaseURL, typed) {
-		dialog.ShowConfirm("Sign out of the current server?",
+		dialog.ShowConfirm("Log out of the current server?",
 			"A session belongs to the server that issued it.\n\nChanging to "+typed+
-				" signs you out of "+b.ui.client.BaseURL+". Continue?",
+				" logs you out of "+b.ui.client.BaseURL+". Continue?",
 			func(confirmed bool) {
 				if confirmed {
 					b.apply(choice)

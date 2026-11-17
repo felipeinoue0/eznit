@@ -50,10 +50,10 @@ folder as a child process, shows its log, and edits the `.env` and the database
 password the server reads:
 
 ```sh
-./eznit-gui        # then: Local server tab → Start
+./eznit-gui        # then: Settings → Local server → Start
 ```
 
-Run it from **this** folder: the Local server tab looks for `eznit` beside the window,
+Run it from **this** folder: **Settings → Local server** looks for `eznit` beside the window,
 so a window copied somewhere else (or started from another folder) has no server
 to run and will say so. A folder from an older release still holds
 `eznit-server`; it is used when `eznit` is absent, so an archive you already
@@ -114,23 +114,32 @@ it is pointed at is another bundle.
   **Revert** reads the file again and discards the edit; **Save configuration**
   answers "nothing to save" when nothing changed.
 
-The window is also a client of one eznit API, chosen on the **Settings** tab —
-the only place the address is set. **My Account**, the button at the right end
-of the tab bar, signs in to it and names it:
+The window is also a client of one eznit API, chosen in **Settings → Server** —
+the only place the address is set. **Log in**, at the right end of the tab bar,
+signs in to it (and becomes **Log out**); the **Workspace** tab appears once you
+are in:
 
 - **Use this machine** is the default and is remembered: checked, the field
-  shows the server the Local server tab would run, on the port that folder's
+  shows the server **Settings → Local server** would run, on the port that folder's
   configuration names, and is shut; unchecked, the field takes any address.
 - **Connect** validates the address and switches to it, remembering it. It is
-  not a login: with no session in the window the account screen keeps its login
-  card, whatever address was connected to.
+  not a login: with no session the window stays logged out, whatever address
+  was connected to.
 - **Test** asks the address `/v1/healthcheck` without saving it.
 - The source line under the checkbox names where the address came from: this
   machine, `-api`, `GUI_API_URL`, or an address you typed.
 
-The Local server tab's folder is an editable field too: type a bundle folder and press
-**Use** (or Enter), or pick one with **Browse…**. **Reset** returns to the folder
-the window was installed in, after asking.
+The local server's folder is an editable field too: type a bundle folder and press
+**Use** (or Enter), or pick one with **Browse…**. **Default folder** returns to
+the folder the window was installed in, after asking.
+
+**Settings → Reset** starts the local server from zero. After a confirmation it
+stops the server if it runs, empties its database through the folder's own
+`migrate` service (`migrate drop -f`; no Docker volume is removed) and empties
+the uploads folder when that lies inside the server folder. Every account, file
+and template is gone; `.env` and the database password are kept, so **Start**
+brings the server back empty. A session on that server is logged out. A
+database on another machine is refused, never touched.
 
 The address is resolved as `-api`, then `GUI_API_URL`, then the address saved in
 `~/.eznit/config.json`, then `http://localhost:4000`. A session belongs to the

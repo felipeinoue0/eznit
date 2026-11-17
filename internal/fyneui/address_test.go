@@ -109,7 +109,7 @@ func TestAddressFieldShowsAWholeAddress(t *testing.T) {
 			u.local = false
 			u.address = apiChoice{url: address, source: "the address you entered on another machine"}
 
-			u.tabs.SelectIndex(tab.index)
+			u.openSettings()
 			bar := tab.bar(u)
 			bar.sync()
 
