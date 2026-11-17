@@ -162,7 +162,11 @@ services:
       - db_password
     ports:
       # The host port is overridable, so two checkouts can run side by side.
-      - "${DB_PORT:-5432}:5432"
+      # Loopback only by default (#388): a published port listens on every
+      # interface, and Docker's own firewall rules bypass ufw, so on a VPS the
+      # database — with a superuser — would face the internet. The API reaches
+      # it over the compose network either way; DB_BIND=0.0.0.0 opens it again.
+      - "${DB_BIND:-127.0.0.1}:${DB_PORT:-5432}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/
     healthcheck:
@@ -213,7 +217,8 @@ services:
       context: ./web
       dockerfile: Dockerfile
     ports:
-      - "${WEB_PORT:-5173}:80"
+      # WEB_BIND=127.0.0.1 behind a reverse proxy, as API_BIND above.
+      - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-5173}:80"
     depends_on:
       api:
         condition: service_healthy
@@ -278,8 +283,10 @@ services:
         VERSION: ${VERSION:-dev}
     ports:
       # Same port the host CLI and the Vite dev server expect. Override it when
-      # it is taken: `API_PORT=4001 docker compose up`.
-      - "${API_PORT:-4000}:4000"
+      # it is taken: `API_PORT=4001 docker compose up`. Behind a reverse proxy
+      # on a VPS, API_BIND=127.0.0.1 keeps it off the internet (and makes
+      # TRUST_PROXY=true safe, see below).
+      - "${API_BIND:-0.0.0.0}:${API_PORT:-4000}:4000"
     environment:
       # In-network addresses, explicitly: `env_file` is deliberately not used
       # here. The gitignored .env belongs to the developer loop (host paths,
