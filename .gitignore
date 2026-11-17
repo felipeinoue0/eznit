@@ -87,3 +87,8 @@ out/
 
 # make backup / scripts/backup.sh output (#388): database dumps and uploads
 backups/
+
+# A server's own Compose additions (Traefik labels, extra networks, …) (#401).
+# Compose merges it into docker-compose.yml automatically; keeping it out of git
+# means a fetch or a release checkout never collides with it.
+docker-compose.override.yml
