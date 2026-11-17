@@ -32,8 +32,9 @@ type settingsView struct {
 	localSection  *container.TabItem
 	resetSection  *container.TabItem
 
-	resetButton *widget.Button
-	resetFolder *widget.Label
+	resetButton  *widget.Button
+	resetFolder  *widget.Label
+	changeFolder *widget.Button
 
 	// The status line, shown at the bottom of Server and of Reset.
 	statuses []*prose
@@ -46,6 +47,8 @@ const (
 	settingsIntro = "The eznit server this window talks to: Explore lists what is public on it, and Log in signs in to it. Use this machine for the server in Local server, or type the address of another one — Test asks it without saving, Connect switches to it."
 
 	localIntro = "The server this machine runs from a folder: Start brings up its database and the API."
+
+	resetFolderHint = "This resets the server in the folder above. To reset another one, choose its folder in Local server first."
 
 	resetIntro = "Erase everything the local server holds and start from zero: every account, every file and every template. It cannot be undone.\n\nKept: the folder's configuration (.env) and its database password, so Start brings the server back, empty. Then create a new account — the first one is the server's admin.\n\nOnly this machine's local server is reset: a server elsewhere is never touched, and the window logs out if its session was on the local one."
 )
@@ -116,11 +119,17 @@ func (v *settingsView) resetContent() fyne.CanvasObject {
 
 	folder := container.NewBorder(nil, nil, widget.NewLabel("Folder"), nil, v.resetFolder)
 
+	// Which server is erased is decided a section away, in Local server; say
+	// so where the folder is shown, and go there in one click (#390).
+	v.changeFolder = widget.NewButtonWithIcon("Change folder…", theme.FolderOpenIcon(),
+		func() { v.showSection(v.localSection) })
+
 	return container.NewVBox(
 		heading("Reset the local server"),
 		newProse(resetIntro),
 		widget.NewSeparator(),
 		folder,
+		container.NewBorder(nil, nil, nil, container.NewCenter(v.changeFolder), newProse(resetFolderHint)),
 		container.NewHBox(v.resetButton),
 	)
 }

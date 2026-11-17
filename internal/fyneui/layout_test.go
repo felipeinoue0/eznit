@@ -592,3 +592,25 @@ func TestSettingsLocalServerKeepsThePageInset(t *testing.T) {
 		})
 	}
 }
+
+// #390: Reset says which folder it erases is chosen in Local server, and its
+// Change folder… button goes there.
+func TestResetSectionLeadsToTheFolder(t *testing.T) {
+	view := newTestServerView(t, bundleDir(t, "API_PORT=\"4000\"\n"))
+	u := view.ui
+	u.settings = newSettingsView(u)
+	view.built = nil
+	u.window.SetContent(u.settings.content())
+	u.settings.showSection(u.settings.resetSection)
+	layOut(u.window, fyne.NewSize(980, 640))
+
+	if u.settings.changeFolder == nil || u.settings.changeFolder.Hidden {
+		t.Fatal("the Reset section has no Change folder… button")
+	}
+
+	u.settings.changeFolder.OnTapped()
+
+	if got := u.settings.sections.Selected(); got != u.settings.localSection {
+		t.Errorf("Change folder… selected %q, want Local server", got.Text)
+	}
+}
