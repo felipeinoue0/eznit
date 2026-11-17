@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"fyne.io/fyne/v2"
-	"fyne.io/fyne/v2/theme"
+	"fyne.io/fyne/v2/test"
 	"fyne.io/fyne/v2/widget"
 
 	"github.com/fiwon123/eznit/internal/apiclient"
@@ -26,7 +26,7 @@ func newTestLogin(t *testing.T, signup bool) *loginView {
 	view := newLoginView(u, "", statusIdle)
 	view.signup = signup
 	u.setAccountTab(view.content())
-	u.tabs.Select(u.accountTab)
+	u.showAccount()
 
 	return view
 }
@@ -44,7 +44,7 @@ func TestLoginHasOnePrimaryAction(t *testing.T) {
 			view := newTestLogin(t, signup)
 
 			primary := 0
-			for _, button := range allButtons(view.ui.accountTab.Content) {
+			for _, button := range allButtons(view.ui.accountBody.Objects[0]) {
 				if button.Importance == widget.HighImportance {
 					primary++
 				}
@@ -57,55 +57,35 @@ func TestLoginHasOnePrimaryAction(t *testing.T) {
 	}
 }
 
-// The local choice belongs with the address field it fills in — under it,
-// inside the same cell, so the field keeps the card's width — not on a row of
-// its own apart from the form.
-func TestLoginPutsThisMachineWithTheServerField(t *testing.T) {
+// The card names the server it signs in to and sends a person to Settings to
+// change it (#376): the address is chosen in one place only.
+func TestLoginNamesTheServerAndLinksToSettings(t *testing.T) {
 	view := newTestLogin(t, false)
-	view.local.SetChecked(false)
-	view.ui.window.Content().Resize(fyne.NewSize(980, 640))
-	relayout(view.ui.window.Content())
+	view.ui.local = false
+	view.ui.address = apiChoice{url: "http://192.168.100.200:4000", source: "the address you entered"}
 
-	if !sharesParent(view.ui.accountTab.Content, view.api, view.local.row) {
-		t.Error("'Use this machine' is not in the Server field's cell")
+	card := newLoginView(view.ui, "", statusIdle)
+	view.ui.setAccountTab(card.content())
+
+	if card.server.Text != "http://192.168.100.200:4000" || !card.server.Selectable {
+		t.Errorf("server line = %q (selectable %v), want the current address", card.server.Text, card.server.Selectable)
 	}
 
-	if view.local.row.Position().Y <= view.api.Position().Y {
-		t.Error("'Use this machine' is beside the Server field; it belongs under it")
+	for _, entry := range []string{"Connect", "Test"} {
+		if findButton(view.ui.accountBody.Objects[0], entry) != nil {
+			t.Errorf("the card still has %q: the address belongs to Settings", entry)
+		}
 	}
 
-	if view.api.Size().Width <= view.local.row.MinSize().Width {
-		t.Errorf("the address field is %.0f px wide, no wider than the choice beside it",
-			view.api.Size().Width)
+	change := findButton(view.ui.accountBody.Objects[0], "Change in Settings")
+	if change == nil {
+		t.Fatal("the card has no way to Settings")
 	}
 
-	view.local.SetChecked(true)
+	test.Tap(change)
 
-	if !view.api.Disabled() {
-		t.Error("the address field is open while the form is set to this machine")
-	}
-
-	if got := view.api.Text; got != view.ui.localAddress() {
-		t.Errorf("address = %q, want this machine's %q", got, view.ui.localAddress())
-	}
-}
-
-// The address field is wide enough for the address a person types: at 176 px
-// it cut off a LAN address on one row beside "Use this machine" (#325).
-func TestLoginServerFieldShowsTheWholeAddress(t *testing.T) {
-	const address = "http://192.168.100.200:4000"
-
-	view := newTestLogin(t, false)
-	view.local.SetChecked(false)
-	view.api.SetText(address)
-
-	view.ui.window.Content().Resize(fyne.NewSize(980, 640))
-	relayout(view.ui.window.Content())
-
-	need := fyne.MeasureText(address, theme.TextSize(), fyne.TextStyle{}).Width + 2*theme.Padding()
-
-	if got := view.api.Size().Width; got < need {
-		t.Errorf("the address field is %.0f px wide, needs %.0f for %q", got, need, address)
+	if view.ui.accountShown() || view.ui.tabs.Selected() != view.ui.settingsTab {
+		t.Error("Change in Settings did not open the Settings tab")
 	}
 }
 
@@ -138,7 +118,6 @@ func TestLoginEntriesSubmitOnEnter(t *testing.T) {
 		"email":    view.email,
 		"password": view.pass,
 		"confirm":  view.confirm,
-		"server":   view.api,
 	} {
 		if entry.OnSubmitted == nil {
 			t.Errorf("the %s field does not submit on Enter", name)
@@ -148,7 +127,6 @@ func TestLoginEntriesSubmitOnEnter(t *testing.T) {
 	// An empty address is refused before anything touches the network, which is
 	// enough to prove the handler is the form's own submit.
 	view.email.SetText("")
-	view.api.SetText("http://127.0.0.1:4321")
 	view.email.OnSubmitted("")
 
 	if view.status.Text == "" {
@@ -184,7 +162,7 @@ func TestLoginCardFitsBothModes(t *testing.T) {
 
 			// The cell has to fit the tab as well, or the window clips the card
 			// and not one of its own rows.
-			if room := view.ui.accountTab.Content.Size(); size.Height > room.Height {
+			if room := view.ui.accountBody.Objects[0].Size(); size.Height > room.Height {
 				t.Errorf("the card needs %.0f px of height but the tab gives it %.0f",
 					size.Height, room.Height)
 			}
@@ -198,7 +176,7 @@ func TestLoginCardFitsBothModes(t *testing.T) {
 func TestLoginShowsWhatSignupNeeds(t *testing.T) {
 	signup := newTestLogin(t, true)
 
-	if !holds(signup.ui.accountTab.Content, signup.hint) {
+	if !holds(signup.ui.accountBody.Objects[0], signup.hint) {
 		t.Fatal("the signup form does not show what an account needs")
 	}
 
@@ -209,7 +187,7 @@ func TestLoginShowsWhatSignupNeeds(t *testing.T) {
 
 	login := newTestLogin(t, false)
 
-	if holds(login.ui.accountTab.Content, login.hint) {
+	if holds(login.ui.accountBody.Objects[0], login.hint) {
 		t.Error("the log-in form shows the signup requirements")
 	}
 }
@@ -358,7 +336,9 @@ func accountServer(t *testing.T, signup, login int) (*httptest.Server, *[2]int) 
 func fillAndSubmit(t *testing.T, view *loginView, server *httptest.Server) {
 	t.Helper()
 
-	view.api.SetText(server.URL)
+	// The card signs in to the window's server, which Settings chooses.
+	view.ui.local = false
+	view.ui.address = apiChoice{url: server.URL, source: "the address you entered"}
 	view.email.SetText("taken@example.test")
 	view.pass.SetText("test123")
 	view.confirm.SetText("test123")

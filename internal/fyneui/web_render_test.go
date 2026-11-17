@@ -68,11 +68,14 @@ func TestListsAndPagesFitTheirWindow(t *testing.T) {
 				u.account.fill()
 				u.account.updateActions()
 				u.account.setStatus("1 template(s) and 2 file(s) on http://127.0.0.1:4000.", statusOK)
-				u.tabs.Select(tabNamed(t, u, "My Account"))
+				u.setAccountTab(u.account.content())
+				u.account.fill()
+				u.showAccount()
 				fits("My Account")
 				capture(t, u, "account-"+suffix)
 
 				u.account.openFile(u.account.files[0])
+				u.settle()
 				fits("a file's page")
 				capture(t, u, "account-file-"+suffix)
 

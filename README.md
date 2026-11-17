@@ -69,9 +69,9 @@ path: it writes a starter into a folder with no server and no account. Full
 flags: [CLI Reference](https://github.com/fiwon123/eznit/wiki/CLI-Reference).
 
 A **template is a folder** — `template publish`, **Publish template…** on the
-desktop window's My Account tab, or **New template** on the web page sends the
-whole folder to the catalogue. Sharing a file (`eznit share`, or **Share** on
-the file's page in My Account) only makes that one file downloadable; it does
+desktop window's My Account screen, or **New template** on the web page sends
+the whole folder to the catalogue. Sharing a file (`eznit share`, or
+**Visibility → Public** on the file's page in My Account) only makes that one file downloadable; it does
 not add anything to Templates. Public templates and shared files are listed on
 the window's **Web** tab and on the web page's Explore — both work without an
 account.

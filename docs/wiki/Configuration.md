@@ -42,10 +42,11 @@ The window is a client: it talks to an eznit API and runs no server.
 | `GUI_API_URL` | `http://localhost:4000` | the API to talk to; it wins over the address saved in the app, so a wrapper script keeps working after a login |
 | `EZNIT_CONFIG` | `~/.eznit/config.json` | the shared store: the server address (`api_url`) and the session token |
 
-The server address is also a field on the sign-in screen and is stored in the
-config file, so the window and the CLI use the same file. The Web and My Account
-headers always name the address in use and where it came from — the `-api` flag,
-`GUI_API_URL`, the saved address, or this machine — and the header
+The server address is stored in the config file, so the window and the CLI use
+the same file. The window's **Settings** tab is the one place it is chosen: it
+names the address in use and where it came from — the `-api` flag,
+`GUI_API_URL`, the saved address, or this machine — and the sign-in card names
+it too, with a way to Settings. Settings is
 offering **This machine** (the port the Local server tab's configuration names) or any
 other address, with a health check before it is saved. A session belongs to the
 server that issued it: changing hosts signs you out, changing ports on one host

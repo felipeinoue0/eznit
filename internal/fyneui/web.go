@@ -9,7 +9,6 @@ import (
 	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/canvas"
 	"fyne.io/fyne/v2/container"
-	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
 	"fyne.io/fyne/v2/widget"
 
@@ -28,13 +27,10 @@ type webView struct {
 	files     []entry
 	loaded    bool
 
-	show    *widget.RadioGroup
+	show    *widget.Select
 	list    *entryList
 	pages   *pager
 	refresh *widget.Button
-
-	// bar is the API address, without a session to end: that is My Account's.
-	bar *addressBar
 
 	status *prose
 	dot    *canvas.Circle
@@ -43,7 +39,7 @@ type webView struct {
 
 // webIntro is the line above the list: what is here, and that an account is
 // optional.
-const webIntro = "What anyone on this server made public. No account is needed to download it; to share your own, open it on My Account."
+const webIntro = "Templates and files anyone on this server made public. No account is needed to download them; to share your own, open My Account."
 
 func newWebView(u *ui) *webView {
 	view := &webView{ui: u, status: newProse("")}
@@ -55,18 +51,18 @@ func newWebView(u *ui) *webView {
 	return view
 }
 
+// content is the tab (#376): what it lists and the filter on top, the list,
+// and the status line — inside the page margins. The server is chosen on the
+// Settings tab, not here.
 func (v *webView) content() fyne.CanvasObject {
-	v.bar = newAddressBar(v.ui, v.setStatus, false)
-	v.bar.afterConnect = v.reload
-
 	v.dot = canvas.NewCircle(statusColour(v.ui.app.Settings().ThemeVariant(), statusIdle))
 
-	filters := container.NewHBox(muted("Show"), v.show, layout.NewSpacer(), v.refresh)
-	top := container.NewVBox(container.NewPadded(newProse(webIntro)), container.NewPadded(filters), widget.NewSeparator())
+	title := container.NewBorder(nil, nil, nil, v.refresh, heading("Public on this server"))
+	filters := container.NewHBox(widget.NewLabel("Show"), v.show)
+	top := container.NewVBox(title, newProse(webIntro), filters, widget.NewSeparator())
 	v.pages = newPager(container.NewBorder(top, nil, nil, nil, v.list.list))
 
-	head := container.NewVBox(v.bar.content(), widget.NewSeparator())
-	v.built = container.NewBorder(head, statusBar(v.dot, v.status), nil, nil, v.pages.stack)
+	v.built = inset(container.NewBorder(nil, statusBar(v.dot, v.status), nil, nil, v.pages.stack))
 
 	return v.built
 }
@@ -198,7 +194,7 @@ func (v *webView) forget() {
 // open shows one row's page.
 func (v *webView) open(item entry) {
 	if item.kind == entryTemplate {
-		openTemplate(v.ui, v.pages, item.template, v.setStatus)
+		openTemplate(v.ui, v.pages, item.template, v.setStatus, false, nil)
 		return
 	}
 
@@ -207,8 +203,8 @@ func (v *webView) open(item entry) {
 	})
 	download.Importance = widget.HighImportance
 
-	body := container.NewVScroll(container.NewPadded(fileFacts(item.file, sharedBy(apiclient.SharedFile{File: item.file, OwnerEmail: item.owner}))))
-	v.pages.push(detailPage(item.name, v.pages.back, body, download))
+	owner := sharedBy(apiclient.SharedFile{File: item.file, OwnerEmail: item.owner})
+	filePage(v.ui, v.pages, item.file, owner, nil, []fyne.CanvasObject{download})
 }
 
 // download is a row's own Download button.

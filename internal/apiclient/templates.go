@@ -3,6 +3,7 @@ package apiclient
 import (
 	"net/http"
 	"net/url"
+	"sort"
 
 	"github.com/fiwon123/eznit/internal/domain/templates"
 	"github.com/fiwon123/eznit/pkg/types"
@@ -82,4 +83,78 @@ func (c *Client) PublishTemplate(request templates.PublishRequest) (*templates.T
 	}
 
 	return &envelope.Data, nil
+}
+
+// UpdateTemplate replaces one of the caller's templates with request — the API
+// has no partial update — and returns the stored result, one version higher.
+func (c *Client) UpdateTemplate(id string, request templates.PublishRequest) (*templates.TemplateDetail, error) {
+	var envelope types.Envelope[templates.TemplateDetail]
+
+	if err := c.do(http.MethodPut, "/v1/templates/"+url.PathEscape(id), jsonBody(request), &envelope); err != nil {
+		return nil, err
+	}
+
+	return &envelope.Data, nil
+}
+
+// SetTemplateVisibility makes one of the caller's templates public or private.
+// It reads the template and writes it back with only the flag changed, which
+// is what the web page does too.
+func (c *Client) SetTemplateVisibility(id string, public bool) (*templates.TemplateDetail, error) {
+	current, err := c.GetTemplate(id)
+	if err != nil {
+		return nil, err
+	}
+
+	request := ToPublishRequest(current)
+	request.IsPublic = public
+
+	return c.UpdateTemplate(id, request)
+}
+
+// ToPublishRequest turns a template's detail back into the body that would
+// publish it: the files as they are, the variables in their declared order and
+// the commands by reference.
+func ToPublishRequest(detail *templates.TemplateDetail) templates.PublishRequest {
+	request := templates.PublishRequest{
+		Name:        detail.Name,
+		Slug:        detail.Slug,
+		Description: detail.Description,
+		Kind:        detail.Kind,
+		IsPublic:    detail.IsPublic,
+		Files:       make([]templates.PublishFile, 0, len(detail.Files)),
+		Variables:   make([]templates.PublishVariable, 0, len(detail.Variables)),
+		Commands:    make([]templates.PublishCommand, 0, len(detail.Commands)),
+	}
+
+	for _, file := range detail.Files {
+		request.Files = append(request.Files, templates.PublishFile{
+			Path:          file.Path,
+			Kind:          file.Kind,
+			Content:       file.Content,
+			ContentBase64: file.ContentBase64,
+			IsExecutable:  file.IsExecutable,
+		})
+	}
+
+	variables := append([]templates.TemplateVariableData(nil), detail.Variables...)
+	sort.SliceStable(variables, func(i, j int) bool { return variables[i].Position < variables[j].Position })
+
+	for _, variable := range variables {
+		request.Variables = append(request.Variables, templates.PublishVariable{
+			Key:          variable.Key,
+			Prompt:       variable.Prompt,
+			DefaultValue: variable.DefaultValue,
+			Required:     variable.Required,
+		})
+	}
+
+	for _, command := range detail.Commands {
+		request.Commands = append(request.Commands, templates.PublishCommand{
+			CommandID:  command.CommandID,
+			TargetPath: command.TargetPath,
+		})
+	}
+
+	return request
 }

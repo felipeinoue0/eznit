@@ -8,8 +8,10 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
 
 	"github.com/fiwon123/eznit/internal/apiclient"
@@ -44,22 +46,40 @@ func newTestAccountView(t *testing.T, address apiChoice) *accountView {
 	return u.account
 }
 
-// The tab says which server it talks to, and why that address: an address that
+// Settings says which server the window talks to, and why that address: an address that
 // came from an environment variable must not look like one a person saved.
-func TestAccountHeaderNamesTheServerAndItsSource(t *testing.T) {
-	view := newTestAccountView(t, apiChoice{url: "http://127.0.0.1:4321", source: "the local server"})
+func TestSettingsNamesTheServerAndItsSource(t *testing.T) {
+	u := newTestUI(t)
+	u.local = false
+	u.address = apiChoice{url: "http://127.0.0.1:4321", source: "the local server"}
+	u.syncAddressBars()
 
-	if got := view.bar.entry.Text; got != "http://127.0.0.1:4321" {
+	bar := u.settings.bar
+	if got := bar.entry.Text; got != "http://127.0.0.1:4321" {
 		t.Errorf("address = %q, want the resolved URL", got)
 	}
-	if view.bar.entry.Disabled() {
+	if bar.entry.Disabled() {
 		t.Error("the address field is disabled, so it cannot be typed")
 	}
-	if !view.bar.source.Selectable {
+	if !bar.source.Selectable {
 		t.Error("the source is not selectable")
 	}
-	if got := view.bar.source.Text; !strings.Contains(got, "the local server") {
+	if got := bar.source.Text; !strings.Contains(got, "the local server") {
 		t.Errorf("source = %q, want where the address came from", got)
+	}
+}
+
+// The address lives on Settings only (#376): neither list carries a bar.
+func TestListsCarryNoAddressBar(t *testing.T) {
+	u := newTestUI(t)
+
+	for name, root := range map[string]fyne.CanvasObject{"Web": u.web.built, "My Account": u.account.built} {
+		if findButton(root, "Connect") != nil || findButton(root, "Test") != nil {
+			t.Errorf("%s still carries the address bar", name)
+		}
+	}
+	if findButton(u.settings.built, "Connect") == nil {
+		t.Error("Settings has no Connect")
 	}
 }
 
@@ -93,7 +113,7 @@ func TestRefusedSessionReturnsToLogin(t *testing.T) {
 	}
 	u.client.Token = "dead-token"
 
-	library := u.accountTab.Content
+	library := u.accountBody.Objects[0]
 
 	u.account.failedToLoad("https://eznit.example.com", &apiclient.APIError{Status: 401, Message: "Invalid token"})
 
@@ -103,10 +123,10 @@ func TestRefusedSessionReturnsToLogin(t *testing.T) {
 	if u.client.Token != "" {
 		t.Errorf("client token = %q, want it cleared", u.client.Token)
 	}
-	if findButton(u.accountTab.Content, "Log in") == nil {
+	if findButton(u.accountBody.Objects[0], "Log in") == nil {
 		t.Error("My Account does not offer to sign in again")
 	}
-	if u.accountTab.Content == library {
+	if u.accountBody.Objects[0] == library {
 		t.Error("the library is still on screen after the session ended")
 	}
 }
@@ -137,7 +157,7 @@ func TestRefusedListingGoesToLogin(t *testing.T) {
 	// the races #333 recorded.
 	u.settle()
 
-	if findButton(u.accountTab.Content, "Log in") == nil {
+	if findButton(u.accountBody.Objects[0], "Log in") == nil {
 		t.Fatal("a refused listing did not bring the login card back")
 	}
 
@@ -166,22 +186,21 @@ func TestUnreachableServerKeepsTheSession(t *testing.T) {
 		t.Errorf("client token = %q, want it kept", u.client.Token)
 	}
 
-	content := u.accountTab.Content
+	content := u.accountBody.Objects[0]
 	if findButton(content, "Try again") == nil {
 		t.Error("the not-connected panel has no Try again")
 	}
 
-	// The bar the panel shows is the one a later sync writes to, and it is in
-	// the tree: a detached bar would swallow every address typed into it.
-	if !holds(content, u.account.bar.entry) {
-		t.Error("the panel's address bar is not the one on screen")
+	// The address is fixed on Settings, and the panel goes there (#376).
+	if findButton(content, "Open Settings") == nil {
+		t.Error("the not-connected panel has no way to Settings")
 	}
 
 	u.local = false
 	u.address = apiChoice{url: "http://127.0.0.1:9999", source: "the address you entered"}
 	u.syncAddressBars()
 
-	if got := u.account.bar.entry.Text; got != "http://127.0.0.1:9999" {
+	if got := u.settings.bar.entry.Text; got != "http://127.0.0.1:9999" {
 		t.Errorf("the tab's address bar shows %q, want the current address", got)
 	}
 }
@@ -212,12 +231,16 @@ func TestAccountRowOpensAPageWithBack(t *testing.T) {
 
 	view.list.list.Select(0)
 
+	// The page asks for a preview in the background; wait for its answer
+	// before reading the page (#333).
+	view.ui.settle()
+
 	if view.pages.atHome() {
 		t.Fatal("tapping the row did not open its page")
 	}
 
 	page := view.pages.stack.Objects[0]
-	for _, caption := range []string{"Back", "Download…", "Share", "Delete", "Copy name", "Copy details"} {
+	for _, caption := range []string{"Back", "Download…", "Delete", "Copy name", "Copy details"} {
 		if findButton(page, caption) == nil {
 			t.Errorf("the file's page has no %q", caption)
 		}
@@ -310,7 +333,7 @@ func TestAccountListsFilesAndTemplates(t *testing.T) {
 // The address in the header is the thing a person changes, so it is a field
 // with a Connect action: typing a valid address switches the tab and is
 // remembered, and the session stays on the same host.
-func TestAccountAddressIsTypedAndConnected(t *testing.T) {
+func TestSettingsAddressIsTypedAndConnected(t *testing.T) {
 	u := newTestUI(t)
 
 	u.client.Token = "the-token"
@@ -318,8 +341,8 @@ func TestAccountAddressIsTypedAndConnected(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	u.account.bar.entry.SetText("http://127.0.0.1:5000")
-	u.account.bar.connectTyped()
+	u.settings.bar.entry.SetText("http://127.0.0.1:5000")
+	u.settings.bar.connectTyped()
 
 	// The connect lands on the library, which starts a listing: let it finish
 	// before reading the window, or the worker's widget work overlaps this
@@ -342,35 +365,35 @@ func TestAccountAddressIsTypedAndConnected(t *testing.T) {
 
 // An address the client cannot use is refused where it was typed: nothing is
 // saved and the status says what is wrong.
-func TestAccountRefusesABadTypedAddress(t *testing.T) {
+func TestSettingsRefusesABadTypedAddress(t *testing.T) {
 	u := newTestUI(t)
 
-	u.account.bar.entry.SetText("not a url")
-	u.account.bar.connectTyped()
+	u.settings.bar.entry.SetText("not a url")
+	u.settings.bar.connectTyped()
 
 	if _, err := config.Value("api_url"); err == nil {
 		t.Error("a bad address was saved")
 	}
 
-	if !strings.Contains(u.account.status.Text, "http://") {
-		t.Errorf("status = %q, want the validation message", u.account.status.Text)
+	if !strings.Contains(u.settings.status.Text, "http://") {
+		t.Errorf("status = %q, want the validation message", u.settings.status.Text)
 	}
 }
 
 // The checkbox is the choice: checked, the bar shows this machine's address and
 // keeps the field shut; unchecking opens it. Neither saves an address — Connect
 // is what switches.
-func TestAccountLocalCheckboxFillsTheField(t *testing.T) {
+func TestSettingsLocalCheckboxFillsTheField(t *testing.T) {
 	u := newTestUI(t)
 
 	u.local = true
-	u.account.bar.sync()
+	u.settings.bar.sync()
 
-	if got := u.account.bar.entry.Text; got != u.localAddress() {
+	if got := u.settings.bar.entry.Text; got != u.localAddress() {
 		t.Errorf("address = %q, want the Local server tab's address %q", got, u.localAddress())
 	}
 
-	if !u.account.bar.entry.Disabled() {
+	if !u.settings.bar.entry.Disabled() {
 		t.Error("the field is open while the bar is set to this machine")
 	}
 
@@ -378,14 +401,92 @@ func TestAccountLocalCheckboxFillsTheField(t *testing.T) {
 		t.Error("setting the choice saved an address")
 	}
 
-	u.account.bar.local.SetChecked(false)
+	u.settings.bar.local.SetChecked(false)
 
-	if u.account.bar.entry.Disabled() {
+	if u.settings.bar.entry.Disabled() {
 		t.Error("unchecking did not open the field")
 	}
 
 	stored, err := config.Value(localModeKey)
 	if err != nil || stored != "false" {
 		t.Errorf("%s = %q (%v), want the manual mode remembered", localModeKey, stored, err)
+	}
+}
+
+// Visibility is a dropdown on the owner's page, and a change asks first in a
+// dialog whose text can be selected (#376). Cancelling puts the dropdown back;
+// confirming sends the change and keeps the new value.
+func TestFileVisibilityAsksFirst(t *testing.T) {
+	var (
+		mu   sync.Mutex
+		sent []string
+	)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		mu.Lock()
+		sent = append(sent, r.Method+" "+r.URL.Path)
+		mu.Unlock()
+		switch {
+		case r.URL.Path == "/v1/files/9f1a/content":
+			_, _ = w.Write([]byte("hello"))
+		case r.URL.Path == "/v1/files/9f1a/share":
+			_, _ = w.Write([]byte(`{"data":{}}`))
+		default:
+			_, _ = w.Write([]byte(`{"data":{"data":[],"total":0}}`))
+		}
+	}))
+	t.Cleanup(server.Close)
+
+	u := newTestUI(t)
+	u.client = apiclient.New(server.URL).WithToken("the-token")
+	u.setAccountTab(u.account.content())
+	u.showAccount()
+
+	u.account.openFile(apiclient.File{ID: "9f1a", Name: "notes", Ext: "txt", Version: 1})
+	u.settle()
+
+	page := u.account.pages.stack.Objects[0]
+	if text := panelText(page); !strings.Contains(text, "hello") {
+		t.Errorf("page text = %q, want the preview of the file", text)
+	}
+
+	choice := findSelect(page)
+	if choice == nil || choice.Selected != "Private" {
+		t.Fatalf("the page has no Visibility dropdown set to Private")
+	}
+
+	choice.SetSelected("Public")
+
+	dialog := u.window.Canvas().Overlays().Top()
+	if dialog == nil {
+		t.Fatal("changing the visibility asked nothing")
+	}
+	said := dialogProse(dialog)
+	if len(said) == 0 || !strings.Contains(said[0].Text, "Anyone who can reach this server") {
+		t.Fatalf("the confirmation has no selectable text saying what happens")
+	}
+	for _, label := range said {
+		if !label.Selectable {
+			t.Errorf("the confirmation's text %q cannot be selected", label.Text)
+		}
+	}
+
+	test.Tap(dialogButton(dialog, "Cancel"))
+
+	if choice.Selected != "Private" {
+		t.Errorf("after Cancel the dropdown shows %q, want Private back", choice.Selected)
+	}
+
+	choice.SetSelected("Public")
+	test.Tap(dialogButton(u.window.Canvas().Overlays().Top(), "Make public"))
+	u.settle()
+
+	mu.Lock()
+	defer mu.Unlock()
+	if !strings.Contains(strings.Join(sent, ","), "POST /v1/files/9f1a/share") {
+		t.Errorf("requests = %v, want the share sent after the confirmation", sent)
+	}
+	if choice.Selected != "Public" {
+		t.Errorf("the dropdown shows %q after the change, want Public", choice.Selected)
 	}
 }

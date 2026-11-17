@@ -20,7 +20,9 @@ import (
 	"fyne.io/fyne/v2/app"
 	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/dialog"
+	"fyne.io/fyne/v2/layout"
 	"fyne.io/fyne/v2/theme"
+	"fyne.io/fyne/v2/widget"
 
 	"github.com/fiwon123/eznit/internal/apiclient"
 	"github.com/fiwon123/eznit/internal/config"
@@ -47,18 +49,27 @@ type ui struct {
 	// fill themselves from the Local server tab's folder; the choice is remembered.
 	local bool
 
-	client  *apiclient.Client
-	web     *webView
-	account *accountView
-	server  *serverView
-	updater *appUpdater
+	client   *apiclient.Client
+	web      *webView
+	account  *accountView
+	settings *settingsView
+	server   *serverView
+	updater  *appUpdater
 
 	tabs *container.AppTabs
 
-	// webTab and accountTab are kept by identity, not position: the account
-	// tab's content is swapped between the login card and the account.
-	webTab     *container.TabItem
-	accountTab *container.TabItem
+	// webTab and settingsTab are kept by identity, not position.
+	webTab      *container.TabItem
+	settingsTab *container.TabItem
+
+	// The window shows one of two screens (#376): the tabs, with the account
+	// button at the far right of their bar, or the account — the login card,
+	// the account's list, or the unreachable panel in accountBody — with Close.
+	mainScreen     fyne.CanvasObject
+	accountScreen  fyne.CanvasObject
+	accountBody    *fyne.Container
+	accountButton  *widget.Button
+	accountSignOut *widget.Button
 
 	// work counts the background requests the tabs have running, so a test can
 	// wait for the window to be idle instead of polling it while it is busy
@@ -101,6 +112,7 @@ func Run(version string, apiURL string, serverDir string) error {
 	u.client = apiclient.New(u.address.url)
 	u.web = newWebView(u)
 	u.account = newAccountView(u)
+	u.settings = newSettingsView(u)
 	u.server = newServerView(u, serverFrom(serverDir))
 
 	if u.local {
@@ -114,7 +126,7 @@ func Run(version string, apiURL string, serverDir string) error {
 	// something to log in to.
 	u.buildTabs()
 
-	window.SetContent(u.tabs)
+	window.SetContent(u.mainScreen)
 
 	// A server this window started should not outlive it; ask before stopping
 	// it, so closing the window is never a surprise shutdown.
@@ -158,19 +170,41 @@ func Run(version string, apiURL string, serverDir string) error {
 	return nil
 }
 
-// buildTabs lays out the four tabs (#373): Web — what is public, first —
-// then My Account, Local server and About.
+// buildTabs lays out the window (#376): on the left the tabs a person works
+// in — Web, Local server, Settings, About — and on the far right of their bar
+// the account button, which opens the account screen.
 func (u *ui) buildTabs() {
 	u.webTab = container.NewTabItemWithIcon("Web", theme.GridIcon(), u.web.content())
-	u.accountTab = container.NewTabItemWithIcon("My Account", theme.AccountIcon(), u.account.content())
+	u.settingsTab = container.NewTabItemWithIcon("Settings", theme.SettingsIcon(), u.settings.content())
 
-	items := []*container.TabItem{u.webTab, u.accountTab}
+	items := []*container.TabItem{u.webTab}
 	if u.server != nil {
 		items = append(items, container.NewTabItemWithIcon("Local server", theme.ComputerIcon(), u.server.content()))
 	}
-	items = append(items, container.NewTabItemWithIcon("About", theme.InfoIcon(), u.aboutContent()))
+	items = append(items, u.settingsTab, container.NewTabItemWithIcon("About", theme.InfoIcon(), u.aboutContent()))
 
 	u.tabs = container.NewAppTabs(items...)
+
+	// The button sits over the empty right end of the tab bar: the bar is
+	// the tabs' own, and a button in it reads as part of it.
+	u.accountButton = widget.NewButtonWithIcon("Sign in", theme.AccountIcon(), u.showAccount)
+	u.accountButton.Importance = widget.LowImportance
+	corner := container.NewVBox(container.NewHBox(layout.NewSpacer(), u.accountButton))
+	u.mainScreen = container.NewStack(u.tabs, container.New(layout.NewCustomPaddedLayout(0, 0, 0, pageInset), corner))
+
+	u.accountSignOut = widget.NewButtonWithIcon("Sign out", theme.LogoutIcon(), u.signOut)
+	u.accountSignOut.Importance = widget.LowImportance
+	closeAccount := widget.NewButtonWithIcon("Close", theme.CancelIcon(), u.hideAccount)
+
+	title := widget.NewLabelWithStyle("My Account", fyne.TextAlignLeading, fyne.TextStyle{Bold: true})
+	header := container.NewVBox(
+		container.New(layout.NewCustomPaddedLayout(theme.Padding(), 0, pageInset, pageInset),
+			container.NewBorder(nil, nil, widget.NewIcon(theme.AccountIcon()), container.NewHBox(u.accountSignOut, closeAccount), title)),
+		widget.NewSeparator(),
+	)
+	u.accountBody = container.NewStack(u.account.content())
+	u.accountScreen = container.NewBorder(header, nil, nil, nil, u.accountBody)
+	u.updateAccountButton()
 
 	// The Web list is per server and per session; it reloads when it is shown
 	// after either changed.
@@ -280,13 +314,65 @@ func (u *ui) connect(choice apiChoice) (bool, error) {
 // syncAddressBars keeps every bar on the current mode and address. A tab
 // rebuilds its bar with its content, so this reads the two views' current ones.
 func (u *ui) syncAddressBars() {
-	if u.account != nil && u.account.bar != nil {
-		u.account.bar.sync()
+	if u.settings != nil && u.settings.bar != nil {
+		u.settings.bar.sync()
+	}
+}
+
+// currentAddress is the server the window means right now: this machine's when
+// the local choice is on, the chosen address otherwise.
+func (u *ui) currentAddress() string {
+	if u.local {
+		return u.localAddress()
 	}
 
-	if u.web != nil && u.web.bar != nil {
-		u.web.bar.sync()
+	return u.address.url
+}
+
+// showAccount puts the account screen in the window.
+func (u *ui) showAccount() {
+	if u.accountScreen != nil {
+		u.window.SetContent(u.accountScreen)
 	}
+}
+
+// hideAccount goes back to the tabs.
+func (u *ui) hideAccount() {
+	if u.mainScreen != nil {
+		u.window.SetContent(u.mainScreen)
+	}
+}
+
+// openSettings leaves the account screen for the Settings tab, where the
+// server is chosen.
+func (u *ui) openSettings() {
+	u.hideAccount()
+
+	if u.tabs != nil && u.settingsTab != nil {
+		u.tabs.Select(u.settingsTab)
+	}
+}
+
+// accountShown reports whether the account screen is the one on show.
+func (u *ui) accountShown() bool {
+	return u.accountScreen != nil && u.window.Content() == u.accountScreen
+}
+
+// updateAccountButton names the account button by the session: Sign in
+// without one, My Account with one. Sign out is only offered with one.
+func (u *ui) updateAccountButton() {
+	if u.accountButton == nil {
+		return
+	}
+
+	if u.client.Token == "" {
+		u.accountButton.SetText("Sign in")
+		u.accountSignOut.Hide()
+		return
+	}
+
+	u.accountButton.SetText("My Account")
+	u.accountSignOut.Show()
 }
 
 // setAPI points the client at an instance and keeps the stored session: the
@@ -351,6 +437,7 @@ func (u *ui) showMain() {
 	}
 
 	u.setAccountTab(u.account.content())
+	u.updateAccountButton()
 	u.account.reload()
 }
 
@@ -365,6 +452,7 @@ func (u *ui) showLogin(message string) {
 // same grey as "you are signed out".
 func (u *ui) showLoginWith(message string, kind statusKind) {
 	u.setAccountTab(newLoginView(u, message, kind).content())
+	u.updateAccountButton()
 }
 
 // showUnreachable puts My Account's "cannot reach" panel in place. The
@@ -378,11 +466,12 @@ func (u *ui) showUnreachable(address string, cause error) {
 	relayout(content)
 }
 
-// setAccountTab replaces My Account's content. The tab itself stays, so the
-// Local server tab keeps its log and its status across a sign-in or a sign-out.
+// setAccountTab replaces what the account screen shows: the login card, the
+// account, or the unreachable panel. The tabs stay as they are, so the Local
+// server tab keeps its log and its status across a sign-in or a sign-out.
 func (u *ui) setAccountTab(content fyne.CanvasObject) {
-	u.accountTab.Content = content
-	u.tabs.Refresh()
+	u.accountBody.Objects = []fyne.CanvasObject{content}
+	u.accountBody.Refresh()
 }
 
 // sessionEnded is what a refused token says. The API answered — with "not a
@@ -417,7 +506,10 @@ func (u *ui) forgetSession(message string) {
 		u.web.forget()
 	}
 
+	// The login card says why, so it is put on show: a session that ended
+	// while the tabs were up would otherwise end silently behind them.
 	u.showLogin(message)
+	u.showAccount()
 }
 
 // copyToClipboard puts text where a person can paste it. It reports whether a

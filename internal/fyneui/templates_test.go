@@ -92,10 +92,23 @@ func TestTemplatesDetailShowsEveryPart(t *testing.T) {
 		}
 	}
 
-	for _, want := range []string{"AGENTS.md", "2.0 KiB", "bin/tool", "executable"} {
-		if !strings.Contains(view.files.Text, want) {
-			t.Errorf("files = %q, want it to mention %q", view.files.Text, want)
-		}
+	// The files are the folder the template writes (#376): folders first,
+	// each file under its own, the command at its target path.
+	if got := strings.Join(view.folder.children[""], ","); got != "bin,scripts,AGENTS.md" {
+		t.Errorf("root = %q, want the folders, then the file", got)
+	}
+	if got := strings.Join(view.folder.children["bin"], ","); got != "bin/tool" {
+		t.Errorf("bin = %q, want bin/tool inside it", got)
+	}
+
+	view.tree.Select("AGENTS.md")
+	if !strings.Contains(view.preview.Text, "# hi") {
+		t.Errorf("preview = %q, want the selected file's text", view.preview.Text)
+	}
+
+	view.tree.Select("bin/tool")
+	if !strings.Contains(view.preview.Text, "executable") || !strings.Contains(view.preview.Text, "binary") {
+		t.Errorf("preview = %q, want a binary, executable file named as such", view.preview.Text)
 	}
 
 	for _, want := range []string{"PROJECT", "Project name", "default demo", "required"} {
@@ -114,7 +127,6 @@ func TestTemplatesDetailShowsEveryPart(t *testing.T) {
 
 	parts := map[string]*prose{
 		"summary":   view.summary,
-		"files":     view.files,
 		"variables": view.variables,
 		"commands":  view.commands,
 	}
@@ -310,8 +322,11 @@ func TestTemplatesEmptySectionsSaySo(t *testing.T) {
 
 	view.show(detail)
 
+	if len(view.folder.children[""]) != 0 {
+		t.Errorf("an empty template shows %v in its folder", view.folder.children[""])
+	}
+
 	for name, section := range map[string]*prose{
-		"files":     view.files,
 		"variables": view.variables,
 		"commands":  view.commands,
 	} {
@@ -409,7 +424,7 @@ func TestOpenTemplateLoadsIntoAPage(t *testing.T) {
 	u := newTestUI(t)
 	u.client = apiclient.New(server.URL)
 
-	page := openTemplate(u, u.web.pages, detail.TemplateData, u.web.setStatus)
+	page := openTemplate(u, u.web.pages, detail.TemplateData, u.web.setStatus, false, nil)
 	u.settle()
 
 	if u.web.pages.atHome() {
@@ -433,7 +448,7 @@ func TestTemplatesDetailTabsCarryCounts(t *testing.T) {
 	view.show(sampleDetail(t))
 
 	for tab, want := range map[*container.TabItem]string{
-		view.filesTab:     "Files (2)",
+		view.filesTab:     "Files (3)",
 		view.variablesTab: "Variables (1)",
 		view.commandsTab:  "Commands (1)",
 	} {
@@ -450,5 +465,26 @@ func TestTemplatesDetailTabsCarryCounts(t *testing.T) {
 
 	if view.parts.Visible() {
 		t.Error("the tabs are visible with nothing selected")
+	}
+}
+
+// Only the owner's page — My Account's — offers the Visibility dropdown, set
+// to the template's state; the Web tab's page shows the state in its summary.
+func TestTemplateVisibilityIsTheOwners(t *testing.T) {
+	view, _ := newTestTemplatePage(t)
+
+	view.show(sampleDetail(t))
+	if findSelect(view.built) != nil {
+		t.Error("a page that is not the owner's offers to change the visibility")
+	}
+
+	view.owned = true
+	detail := sampleDetail(t)
+	detail.IsPublic = false
+	view.show(detail)
+
+	choice := findSelect(view.built)
+	if choice == nil || choice.Selected != "Private" {
+		t.Fatalf("the owner's page has no Visibility dropdown set to Private")
 	}
 }
