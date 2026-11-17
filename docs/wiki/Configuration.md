@@ -113,6 +113,13 @@ refuses to start while the other runs, and tells you the command that stops it.
 | --- | --- | --- |
 | `DOMAIN` | *(none)* | the host name the `caddy` service gets a certificate for |
 | `COMPOSE_PROFILES` | *(none)* | `https` adds the `caddy` service to a plain `docker compose up` |
+| `TRAEFIK_NETWORK` | `traefik` | with `PROXY=traefik`: the Docker network Traefik is on |
+| `TRAEFIK_ENTRYPOINT` | `websecure` | with `PROXY=traefik`: Traefik's HTTPS entrypoint |
+| `TRAEFIK_CERTRESOLVER` | `letsencrypt` | with `PROXY=traefik`: Traefik's certificate resolver |
+
+Server-specific Compose changes (labels, networks) belong in
+`docker-compose.override.yml`, which Compose merges automatically and git ignores.
+See [Behind Traefik or your own proxy](https://github.com/fiwon123/eznit/wiki/Deploying-on-a-VPS#-behind-traefik-or-your-own-proxy).
 | `TRUST_PROXY` | `false` | `true`, see [Rate limiting](#-auth-rate-limiting) |
 
 > [!CAUTION]

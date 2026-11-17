@@ -1,7 +1,13 @@
 #!/bin/sh
 # Prepare this checkout to run as a public server on a VPS (#398).
 #
-#   scripts/vps-init.sh DOMAIN          (make vps-init DOMAIN=eznit.example.com)
+#   scripts/vps-init.sh DOMAIN [PROXY]  (make vps-init DOMAIN=eznit.example.com [PROXY=traefik])
+#
+# PROXY says what serves HTTPS:
+#   caddy    (default) the `caddy` service in docker-compose.yml, on 80 and 443
+#   traefik  a Traefik the server already runs: writes docker-compose.override.yml
+#            with the labels and the network for the `web` service (#401)
+#   none     your own reverse proxy, pointed at 127.0.0.1:5173
 #
 # Run it once, after `make setup` (the make target runs that first). It
 #   - replaces the example database password with a random one, but only while
@@ -9,10 +15,12 @@
 #     volume, so changing it afterwards would lock the API out of the data;
 #   - keeps the API and the UI ports on 127.0.0.1, so only the HTTPS proxy is
 #     public, and lets the API trust the proxy's forwarded client address;
-#   - turns on the `caddy` service (COMPOSE_PROFILES=https) for DOMAIN.
+#   - turns on the `caddy` service (COMPOSE_PROFILES=https) for DOMAIN, or for
+#     PROXY=traefik|none turns it off, so it does not fight that proxy for 80/443.
 #
 # After it, `docker compose up -d --build` starts everything, HTTPS included.
-# Running it again is safe: it changes only what is not set yet, and DOMAIN.
+# Running it again is safe: it changes only what is not set yet, DOMAIN and the
+# proxy choice. An existing docker-compose.override.yml is never overwritten.
 # The password is never printed.
 set -eu
 
@@ -20,6 +28,8 @@ cd "$(dirname "$0")/.."
 umask 077
 
 DOMAIN="${1:-}"
+PROXY="${2:-caddy}"
+OVERRIDE="docker-compose.override.yml"
 ENV_FILE=".env"
 SECRET="secrets/db_password.txt"
 SECRET_EXAMPLE="secrets/db_password.txt.example"
@@ -36,6 +46,11 @@ case "$DOMAIN" in
         fail "\"$DOMAIN\" is not a host name: give only the name, like eznit.example.com, with no https:// or path" ;;
     *.*) ;;
     *) fail "\"$DOMAIN\" is not a public host name: it needs a dot, like eznit.example.com" ;;
+esac
+
+case "$PROXY" in
+    caddy | traefik | none) ;;
+    *) fail "PROXY=$PROXY is not one of caddy (the default), traefik or none" ;;
 esac
 
 command -v docker >/dev/null 2>&1 || fail "docker is not on PATH — install Docker and its Compose plugin first"
@@ -95,19 +110,84 @@ set_env WEB_BIND 127.0.0.1
 set_env TRUST_PROXY true
 set_env DOMAIN "$DOMAIN"
 
+# The `https` profile is the built-in Caddy: on for PROXY=caddy, off otherwise.
 profiles="$(get_env COMPOSE_PROFILES)"
-case ",$profiles," in
-    *,https,*) ;;
-    ,,) set_env COMPOSE_PROFILES https ;;
-    *) set_env COMPOSE_PROFILES "$profiles,https" ;;
-esac
+others="$(printf '%s' "$profiles" | tr ',' '\n' | grep -vx 'https' | grep . | paste -sd, - || true)"
+if [ "$PROXY" = caddy ]; then
+    set_env COMPOSE_PROFILES "${others:+$others,}https"
+else
+    set_env COMPOSE_PROFILES "$others"
+fi
 say "set API_BIND, WEB_BIND, TRUST_PROXY, DOMAIN=$DOMAIN and COMPOSE_PROFILES in $ENV_FILE"
+
+# write_traefik_override puts the `web` service on Traefik's network with the
+# labels that route DOMAIN to it. `default` stays in the list: it is how `web`
+# reaches `api`, and dropping it turns every request into a 502.
+write_traefik_override() {
+    cat >"$OVERRIDE" <<'YAML'
+# Written by `make vps-init PROXY=traefik` (#401). Local to this server:
+# gitignored, merged into docker-compose.yml by every `docker compose` command,
+# and never touched by a fetch or `make vps-update`. Edit it freely.
+#
+# Names come from .env, with these defaults: TRAEFIK_NETWORK=traefik,
+# TRAEFIK_ENTRYPOINT=websecure, TRAEFIK_CERTRESOLVER=letsencrypt.
+services:
+  web:
+    networks:
+      - default    # how web reaches the api: keep it
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      # Which network Traefik dials: web is on two.
+      - "traefik.docker.network=${TRAEFIK_NETWORK:-traefik}"
+      - "traefik.http.routers.eznit.rule=Host(`${DOMAIN:?set DOMAIN in .env (make vps-init DOMAIN=...)}`)"
+      - "traefik.http.routers.eznit.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
+      - "traefik.http.routers.eznit.tls=true"
+      - "traefik.http.routers.eznit.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}"
+      # nginx in the web image listens on 80.
+      - "traefik.http.services.eznit.loadbalancer.server.port=80"
+
+networks:
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:-traefik}
+YAML
+    chmod 644 "$OVERRIDE"
+}
+
+case "$PROXY" in
+    traefik)
+        if [ -e "$OVERRIDE" ]; then
+            say "kept the existing $OVERRIDE (delete it and run this again for a fresh one)"
+            grep -q 'traefik' "$OVERRIDE" ||
+                say "WARNING: $OVERRIDE does not mention traefik — add the labels yourself, see the wiki"
+        else
+            write_traefik_override
+            say "wrote $OVERRIDE: Traefik routes $DOMAIN to the web service"
+        fi
+        network="$(get_env TRAEFIK_NETWORK)"
+        network="${network:-traefik}"
+        docker network inspect "$network" >/dev/null 2>&1 ||
+            say "WARNING: there is no Docker network \"$network\" — set TRAEFIK_NETWORK in $ENV_FILE to the one your Traefik uses (docker network ls)"
+        ;;
+    caddy)
+        [ ! -e "$OVERRIDE" ] || ! grep -q 'traefik' "$OVERRIDE" ||
+            say "WARNING: $OVERRIDE still routes through Traefik — delete it, or Traefik and Caddy both serve $DOMAIN"
+        ;;
+    none)
+        say "the built-in HTTPS is off: point your reverse proxy at 127.0.0.1:${WEB_PORT:-5173}"
+        ;;
+esac
 
 cat <<EOF
 
 Ready. Before the first start:
   - DOMAIN's DNS (an A record) must point at this server's address;
-  - ports 80 and 443 must be open and free (no other web server running).
+$(case "$PROXY" in
+    caddy) echo "  - ports 80 and 443 must be open and free (no other web server running)." ;;
+    traefik) echo "  - your Traefik must be running, with the entrypoint and resolver named in $OVERRIDE." ;;
+    none) echo "  - your reverse proxy must send https://$DOMAIN to 127.0.0.1:${WEB_PORT:-5173}." ;;
+esac)
 
 Start it:          docker compose up -d --build
 Then open:         https://$DOMAIN   and sign up first — the first account is the admin.
