@@ -84,3 +84,6 @@ out/
 
 # Claude Code per-user overrides — personal permission grants, never shared.
 .claude/settings.local.json
+
+# make backup / scripts/backup.sh output (#388): database dumps and uploads
+backups/

@@ -99,16 +99,7 @@ func (v *accountView) publishFolder() {
 		return
 	}
 
-	dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
-		if err != nil {
-			v.setStatus("The folder could not be chosen: "+err.Error(), statusError)
-			return
-		}
-		if uri == nil {
-			return
-		}
-
-		root := uri.Path()
+	use := func(root string) {
 		v.setStatus("Reading "+root+"…", statusPending)
 
 		v.ui.background(func() {
@@ -128,7 +119,21 @@ func (v *accountView) publishFolder() {
 				v.showPublishForm(root, files, skipped)
 			})
 		})
-	}, v.ui.window)
+	}
+
+	v.ui.pick(func(p picker) (string, error) { return p.openFolder("Choose a folder to publish") }, use, func() {
+		dialog.ShowFolderOpen(func(uri fyne.ListableURI, err error) {
+			if err != nil {
+				v.setStatus("The folder could not be chosen: "+err.Error(), statusError)
+				return
+			}
+			if uri == nil {
+				return
+			}
+
+			use(uri.Path())
+		}, v.ui.window)
+	})
 }
 
 // publishDialog is the open form's controls. It is returned so a test can fill

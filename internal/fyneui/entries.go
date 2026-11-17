@@ -5,6 +5,7 @@ package fyneui
 import (
 	"bytes"
 	"fmt"
+	"os"
 	"strings"
 	"unicode/utf8"
 
@@ -461,17 +462,8 @@ func filePage(u *ui, pages *pager, file apiclient.File, owner string, controls [
 func downloadFile(u *ui, file apiclient.File, report func(string, statusKind)) {
 	name := fileName(file)
 
-	save := dialog.NewFileSave(func(writer fyne.URIWriteCloser, err error) {
-		if err != nil {
-			report("The destination could not be chosen: "+err.Error(), statusError)
-			return
-		}
-		if writer == nil {
-			return
-		}
-		path := writer.URI().Path()
-		writer.Close()
-
+	// The download itself, from either dialog.
+	download := func(path string) {
 		report("Downloading "+name+"…", statusPending)
 
 		client := u.client
@@ -486,9 +478,25 @@ func downloadFile(u *ui, file apiclient.File, report func(string, statusKind)) {
 				report("Saved to "+saved+".", statusOK)
 			})
 		})
-	}, u.window)
-	save.SetFileName(name)
-	save.Show()
+	}
+
+	u.pick(func(p picker) (string, error) { return p.saveFile("Save "+name, name, "") }, download, func() {
+		save := dialog.NewFileSave(func(writer fyne.URIWriteCloser, err error) {
+			if err != nil {
+				report("The destination could not be chosen: "+err.Error(), statusError)
+				return
+			}
+			if writer == nil {
+				return
+			}
+			path := writer.URI().Path()
+			writer.Close()
+
+			download(path)
+		}, u.window)
+		save.SetFileName(name)
+		save.Show()
+	})
 }
 
 // downloadTemplate is a template row's Download: the template fetched whole
@@ -514,32 +522,63 @@ func downloadTemplate(u *ui, item templates.TemplateData, report func(string, st
 // saveBundle writes a template as the offline bundle the CLI reads, so the
 // window and `template export` produce the same file.
 func saveBundle(u *ui, detail *templates.TemplateDetail, report func(string, statusKind)) {
-	save := dialog.NewFileSave(func(writer fyne.URIWriteCloser, err error) {
+	saved := func(path string) {
+		report(fmt.Sprintf("Saved %s. Apply it with `eznit template apply --from-file %s`.", path, path), statusOK)
+	}
+
+	// The system dialog hands back a path; the file is written here, the same
+	// bytes the Fyne dialog's writer receives below.
+	write := func(path string) {
+		file, err := os.Create(path)
 		if err != nil {
-			report("The destination could not be chosen: "+err.Error(), statusError)
-			return
-		}
-		if writer == nil {
-			return
-		}
-
-		path := writer.URI().Path()
-
-		if err := exportBundle(writer, detail); err != nil {
-			writer.Close()
 			report("The bundle could not be written: "+err.Error(), statusError)
 			return
 		}
 
-		if err := writer.Close(); err != nil {
+		if err := exportBundle(file, detail); err != nil {
+			file.Close()
+			report("The bundle could not be written: "+err.Error(), statusError)
+			return
+		}
+
+		if err := file.Close(); err != nil {
 			report("The bundle was written but could not be closed: "+err.Error(), statusError)
 			return
 		}
 
-		report(fmt.Sprintf("Saved %s. Apply it with `eznit template apply --from-file %s`.", path, path), statusOK)
-	}, u.window)
+		saved(path)
+	}
 
-	save.SetFileName(bundleFilename(detail))
-	save.SetFilter(storage.NewExtensionFileFilter([]string{bundleExtension}))
-	save.Show()
+	name := bundleFilename(detail)
+
+	u.pick(func(p picker) (string, error) { return p.saveFile("Save "+name, name, bundleExtension) }, write, func() {
+		save := dialog.NewFileSave(func(writer fyne.URIWriteCloser, err error) {
+			if err != nil {
+				report("The destination could not be chosen: "+err.Error(), statusError)
+				return
+			}
+			if writer == nil {
+				return
+			}
+
+			path := writer.URI().Path()
+
+			if err := exportBundle(writer, detail); err != nil {
+				writer.Close()
+				report("The bundle could not be written: "+err.Error(), statusError)
+				return
+			}
+
+			if err := writer.Close(); err != nil {
+				report("The bundle was written but could not be closed: "+err.Error(), statusError)
+				return
+			}
+
+			saved(path)
+		}, u.window)
+
+		save.SetFileName(name)
+		save.SetFilter(storage.NewExtensionFileFilter([]string{bundleExtension}))
+		save.Show()
+	})
 }

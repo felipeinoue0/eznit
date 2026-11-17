@@ -443,7 +443,7 @@ jobs:
           # platform the packer skipped fails here instead of shipping.
           env $host go run ./internal/tools/winres -verify-archives verify/all \
             -app eznit -short ez -gui \
-            -files README.md,LICENSE,LICENSE-FYNE,LICENSE-APACHE,NOTICE,RUNNING.md,docker-compose.yml \
+            -files README.md,LICENSE,LICENSE-FYNE,LICENSE-APACHE,LICENSE-ZENITY,NOTICE,RUNNING.md,docker-compose.yml \
             -commit "$PROVENANCE_COMMIT"
 
       - name: Regenerate the checksums

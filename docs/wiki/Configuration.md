@@ -93,6 +93,18 @@ it applies the same limits to its in-process API.
 The two entry points publish the same ports and are alternatives; each refuses to
 start while the other runs and names the command that clears the way.
 
+Which interface each published port listens on is set per service:
+
+| Variable | Default | Meaning |
+| --- | --- | --- |
+| `DB_BIND` | `127.0.0.1` | the database answers on this machine only — the API reaches it over the Compose network regardless. `0.0.0.0` publishes it on every interface |
+| `API_BIND` | `0.0.0.0` | set `127.0.0.1` behind a reverse proxy (then `TRUST_PROXY=true` is safe) |
+| `WEB_BIND` | `0.0.0.0` | set `127.0.0.1` behind a reverse proxy |
+
+Docker's own firewall rules bypass `ufw`, so binding to loopback is what keeps a
+port off the internet on a VPS — see
+[Deploying on a VPS](https://github.com/fiwon123/eznit/wiki/Deploying-on-a-VPS).
+
 ## 🔐 Files and secrets
 
 | File | Committed? | Holds |

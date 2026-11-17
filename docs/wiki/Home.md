@@ -37,6 +37,7 @@ The full walkthrough, including the release-bundle and no-Make paths, is on
 | publish and apply a template | [Templates and skills](https://github.com/fiwon123/eznit/wiki/Templates-and-Skills) |
 | look up a command or flag | [CLI Reference](https://github.com/fiwon123/eznit/wiki/CLI-Reference) |
 | configure every variable and secret | [Configuration](https://github.com/fiwon123/eznit/wiki/Configuration) |
+| run it on a VPS without losing data | [Deploying on a VPS](https://github.com/fiwon123/eznit/wiki/Deploying-on-a-VPS) |
 | know what runs on which OS or shell | [Platforms and shells](https://github.com/fiwon123/eznit/wiki/Platforms-and-Shells) |
 | see what is planned | [Direction](https://github.com/fiwon123/eznit/wiki/Direction) |
 | develop or cut a release | [Development](https://github.com/fiwon123/eznit/wiki/Development) · [Releases](https://github.com/fiwon123/eznit/wiki/Releases) |
