@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"fyne.io/fyne/v2"
+	"fyne.io/fyne/v2/container"
 	"fyne.io/fyne/v2/theme"
 
 	"github.com/fiwon123/eznit/internal/apiclient"
@@ -52,7 +54,7 @@ func TestListsAndPagesFitTheirWindow(t *testing.T) {
 				}
 				u.web.fill()
 				u.web.setStatus("1 template(s) and 2 file(s) on http://127.0.0.1:4000.", statusOK)
-				u.tabs.Select(tabNamed(t, u, "Web"))
+				u.tabs.Select(tabNamed(t, u, "Explore"))
 				fits("the Web list")
 				capture(t, u, "web-"+suffix)
 
@@ -68,9 +70,10 @@ func TestListsAndPagesFitTheirWindow(t *testing.T) {
 				u.account.fill()
 				u.account.updateActions()
 				u.account.setStatus("1 template(s) and 2 file(s) on http://127.0.0.1:4000.", statusOK)
-				u.setAccountTab(u.account.content())
+				u.setWorkspace(u.account.content())
 				u.account.fill()
-				u.showAccount()
+				u.addWorkspaceTab()
+				u.tabs.Select(u.workspaceTab)
 				fits("My Account")
 				capture(t, u, "account-"+suffix)
 
@@ -104,6 +107,38 @@ func capture(t *testing.T, u *ui, file string) {
 	if dir := os.Getenv("EZNIT_CAPTURE_DIR"); dir != "" {
 		if err := writePNG(filepath.Join(dir, file), captured); err != nil {
 			t.Fatal(err)
+		}
+	}
+}
+
+// Settings draws each of its sections — Server, Local server, Reset — at the
+// sizes a person gets, in both themes, without the window having to grow
+// (#379). The local server panel is the tallest thing in the window.
+func TestSettingsFitsItsWindow(t *testing.T) {
+	sizes := []fyne.Size{fyne.NewSize(980, 640), fyne.NewSize(800, 520)}
+	themes := map[string]fyne.Theme{"light": theme.LightTheme(), "dark": theme.DarkTheme()}
+
+	for name, th := range themes {
+		for _, size := range sizes {
+			t.Run(fmt.Sprintf("%s/%.0fx%.0f", name, size.Width, size.Height), func(t *testing.T) {
+				u := newTestUI(t)
+				u.app.Settings().SetTheme(th)
+				u.server = newServerView(u, bundleDir(t, "API_PORT=\"4000\"\n"))
+				u.settings = newSettingsView(u)
+				u.settingsScreen = u.screen("Settings", theme.SettingsIcon(), u.settings.content())
+				u.window.Resize(size)
+				u.showScreen(u.settingsScreen)
+
+				for _, section := range []*container.TabItem{u.settings.serverSection, u.settings.localSection, u.settings.resetSection} {
+					u.settings.showSection(section)
+					u.window.Content().Resize(size)
+
+					if min := u.window.Content().MinSize(); min.Width > size.Width || min.Height > size.Height {
+						t.Errorf("Settings → %s needs %.0fx%.0f, the window has %.0fx%.0f", section.Text, min.Width, min.Height, size.Width, size.Height)
+					}
+					capture(t, u, fmt.Sprintf("settings-%s-%s-%.0fx%.0f.png", strings.ReplaceAll(strings.ToLower(section.Text), " ", "-"), name, size.Width, size.Height))
+				}
+			})
 		}
 	}
 }

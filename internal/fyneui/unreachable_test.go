@@ -22,7 +22,7 @@ func TestUnreachablePanelNamesTheAddress(t *testing.T) {
 	address := "http://127.0.0.1:4321"
 	u.showUnreachable(address, fmt.Errorf("%w: dial tcp %s: connect: connection refused", apiclient.ErrUnreachable, address))
 
-	content := u.accountBody.Objects[0]
+	content := u.workspaceBody.Objects[0]
 
 	if findLabel(content, "Cannot reach this server") == nil {
 		t.Error("the panel has no headline")
@@ -44,7 +44,7 @@ func TestUnreachablePanelNamesTheAddress(t *testing.T) {
 		t.Error("Try again runs nothing")
 	}
 
-	if findButton(content, "Sign out") == nil {
+	if findButton(content, "Log out") == nil {
 		t.Error("the panel has no Sign out")
 	}
 }
@@ -68,7 +68,7 @@ func TestUnreachablePanelNamesAnUnexpectedAnswer(t *testing.T) {
 
 			u.showUnreachable("http://127.0.0.1:4321", &apiclient.APIError{Status: tt.status})
 
-			if got := panelText(u.accountBody.Objects[0]); !strings.Contains(got, tt.want) {
+			if got := panelText(u.workspaceBody.Objects[0]); !strings.Contains(got, tt.want) {
 				t.Errorf("the panel says %q, want %q", got, tt.want)
 			}
 		})
@@ -81,16 +81,15 @@ func TestUnreachablePanelOpensSettings(t *testing.T) {
 	u := newTestUI(t)
 
 	u.showUnreachable("http://127.0.0.1:4321", fmt.Errorf("%w: no route to host", apiclient.ErrUnreachable))
-	u.showAccount()
 
-	open := findButton(u.accountBody.Objects[0], "Open Settings")
+	open := findButton(u.workspaceBody.Objects[0], "Open Settings")
 	if open == nil {
 		t.Fatal("the panel has no Open Settings")
 	}
 
 	test.Tap(open)
 
-	if u.accountShown() || u.tabs.Selected() != u.settingsTab {
+	if !u.screenShown(u.settingsScreen) || u.settings.sections.Selected() != u.settings.serverSection {
 		t.Error("Open Settings did not land on the Settings tab")
 	}
 }

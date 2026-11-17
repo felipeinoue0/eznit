@@ -36,7 +36,7 @@ const stopTimeout = 15 * time.Second
 // the offset a few pixels; a wheel notch moves it much further.
 const followTolerance = 24
 
-// serverView is the Local server tab: run the server from a bundle
+// serverView is the local server: run the server from a bundle
 // folder, watch what it prints, and edit the .env beside it.
 //
 // It is a control panel, not a remote client: it drives a process on this
@@ -100,6 +100,13 @@ type serverView struct {
 	// prepare is the database step. It is a field so a test can answer for it:
 	// the real one starts containers, and most tests are about the buttons.
 	prepare func(ctx context.Context, dir string, out io.Writer) (serverctl.Result, error)
+
+	// wipe is the reset (#379), a field for the same reason as prepare.
+	wipe func(ctx context.Context, dir string, out io.Writer) (serverctl.ResetResult, error)
+
+	// stepTitle is what the status says while a step runs: preparing the
+	// database, or resetting the server.
+	stepTitle string
 
 	outputControls *fyne.Container
 
@@ -166,6 +173,7 @@ func newServerView(u *ui, dir string) *serverView {
 		fieldCaptions:  map[string]*widget.Label{},
 		dirtyFields:    map[string]bool{},
 		prepare:        serverctl.Prepare,
+		wipe:           serverctl.Reset,
 	}
 
 	view.useDir(dir)
@@ -194,6 +202,11 @@ func (v *serverView) useDir(dir string) {
 	v.consumed = 0
 	if v.log != nil {
 		v.log.SetText("")
+	}
+
+	// Settings names the folder a reset would erase.
+	if v.ui != nil && v.ui.settings != nil {
+		v.ui.settings.syncFolder()
 	}
 }
 
@@ -247,12 +260,12 @@ func (v *serverView) resetDir() {
 	}
 
 	if v.folderPath() == defaultServerDir() {
-		v.setNote("The Local server tab is already using the folder this window was installed in.")
+		v.setNote("The local server is already using the folder this window was installed in.")
 		return
 	}
 
 	body := widget.NewLabel(fmt.Sprintf(
-		"Point the Local server tab back at the default folder?\n\nThe window was installed in: %s\nIt is using: %s\n\nNo .env and no secret file is changed.",
+		"Point the local server back at the default folder?\n\nThe window was installed in: %s\nIt is using: %s\n\nNo .env and no secret file is changed.",
 		defaultServerDir(), v.folderPath()))
 	body.Wrapping = fyne.TextWrapWord
 	body.Selectable = true
@@ -349,7 +362,9 @@ func (v *serverView) content() fyne.CanvasObject {
 
 	v.use = widget.NewButtonWithIcon("Use", theme.ConfirmIcon(), v.useTypedFolder)
 	v.choose = widget.NewButtonWithIcon("Browse…", theme.FolderOpenIcon(), v.chooseFolder)
-	v.reset = widget.NewButtonWithIcon("Reset", theme.ViewRefreshIcon(), v.resetDir)
+	// "Default folder", not "Reset": Reset is the section that erases the
+	// server's data (#379), and this only points the panel back at a folder.
+	v.reset = widget.NewButtonWithIcon("Default folder", theme.ViewRefreshIcon(), v.resetDir)
 
 	// One compact header rather than a card: the card left the panes 121 px
 	// tall at 980x640 (#235), which is why the log could not be read and the
@@ -574,7 +589,11 @@ func (v *serverView) refresh() {
 	if v.preparing {
 		// The database step is running: the buttons and the folder stay as they
 		// were left, and the status says what is happening.
-		v.status.SetText("Preparing the database…")
+		title := v.stepTitle
+		if title == "" {
+			title = "Preparing the database…"
+		}
+		v.status.SetText(title)
 		v.health.SetText("Starting or checking the database")
 		v.dot.FillColor = statusColour(v.ui.app.Settings().ThemeVariant(), statusPending)
 		v.dot.Refresh()
@@ -1528,7 +1547,7 @@ func (v *serverView) notBundleNote() string {
 	return fmt.Sprintf(
 		"This folder is not a server bundle: it has no %s. A bundle is the extracted release archive — "+
 			"run eznit-gui from inside it, or choose that folder with Choose folder…. "+
-			"To use a server that already runs, type its address on the Settings tab instead.",
+			"To use a server that already runs, type its address in Settings → Server instead.",
 		strings.Join(v.bundle.Missing(), " and "))
 }
 

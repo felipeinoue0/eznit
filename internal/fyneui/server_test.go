@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -305,7 +306,7 @@ func TestServerViewSaysWhenTheFolderIsNotABundle(t *testing.T) {
 		t.Error("Create .env is offered although there is no example to copy")
 	}
 
-	for _, want := range []string{"not a server bundle", serverctl.BinaryName(), "release archive", "Settings tab"} {
+	for _, want := range []string{"not a server bundle", serverctl.BinaryName(), "release archive", "Settings → Server"} {
 		if !strings.Contains(view.note.Text, want) {
 			t.Errorf("note = %q, want it to mention %q", view.note.Text, want)
 		}
@@ -1764,4 +1765,87 @@ func TestServerViewRightClickOpensTheMenu(t *testing.T) {
 	}
 
 	view.logMenu.Hide()
+}
+
+// A reset asks first, in words that can be copied, and does nothing on Cancel;
+// confirmed, it runs the reset for the panel's folder and says what it did
+// (#379).
+func TestResetAsksThenErases(t *testing.T) {
+	dir := bundleDir(t, "API_PORT=\"4000\"\n")
+	view := newTestServerView(t, dir)
+
+	var mu sync.Mutex
+	var asked []string
+	view.wipe = func(_ context.Context, folder string, _ io.Writer) (serverctl.ResetResult, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		asked = append(asked, folder)
+		return serverctl.ResetResult{Dropped: true, Uploads: filepath.Join(folder, "uploads"), Removed: 3}, nil
+	}
+
+	view.askReset()
+
+	dialog := view.ui.window.Canvas().Overlays().Top()
+	if dialog == nil {
+		t.Fatal("a reset asked nothing")
+	}
+	said := dialogProse(dialog)
+	if len(said) == 0 || !strings.Contains(said[0].Text, dir) || !strings.Contains(said[0].Text, "Kept") || !said[0].Selectable {
+		t.Fatal("the confirmation does not name the folder and what is kept, in selectable text")
+	}
+
+	test.Tap(dialogButton(dialog, "Cancel"))
+	view.ui.settle()
+
+	mu.Lock()
+	if len(asked) != 0 {
+		t.Errorf("Cancel still reset %v", asked)
+	}
+	mu.Unlock()
+
+	view.askReset()
+	test.Tap(dialogButton(view.ui.window.Canvas().Overlays().Top(), "Reset"))
+	waitForStep(t, view)
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(asked) != 1 || asked[0] != dir {
+		t.Fatalf("reset ran for %v, want the panel's folder once", asked)
+	}
+	if !strings.Contains(view.note.Text, "database is empty") || !strings.Contains(view.note.Text, "3 item(s)") {
+		t.Errorf("note = %q, want what the reset did", view.note.Text)
+	}
+	if view.preparing {
+		t.Error("the panel is still busy after the reset")
+	}
+}
+
+// A failed reset says so, and that the database may already be empty.
+func TestResetReportsAFailure(t *testing.T) {
+	dir := bundleDir(t, "API_PORT=\"4000\"\n")
+	view := newTestServerView(t, dir)
+
+	view.wipe = func(context.Context, string, io.Writer) (serverctl.ResetResult, error) {
+		return serverctl.ResetResult{Dropped: true}, errors.New("permission denied")
+	}
+
+	view.resetData()
+	waitForStep(t, view)
+
+	if !strings.Contains(view.note.Text, "did not finish") || !strings.Contains(view.note.Text, "emptied already") {
+		t.Errorf("note = %q, want the failure and what was done", view.note.Text)
+	}
+}
+
+// The note says plainly when the uploads were left alone.
+func TestResetNote(t *testing.T) {
+	kept := resetNote("/srv/eznit", serverctl.ResetResult{Dropped: true, Uploads: "/data/uploads", UploadsKept: true})
+	if !strings.Contains(kept, "outside the server folder") {
+		t.Errorf("note = %q, want the kept uploads named", kept)
+	}
+
+	none := resetNote("/srv/eznit", serverctl.ResetResult{Dropped: true})
+	if !strings.Contains(none, "database is empty.") || !strings.Contains(none, "Start it") {
+		t.Errorf("note = %q", none)
+	}
 }

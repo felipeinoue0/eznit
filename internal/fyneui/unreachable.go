@@ -17,7 +17,7 @@ import (
 // error page rather than a state the tab is in.
 const unreachableWidth float32 = 460
 
-// unreachableView is My Account when the server did not answer. It is not a
+// unreachableView is Workspace when the server did not answer. It is not a
 // sign-out: the token is kept, because a server that is not there has said
 // nothing about it, so the way forward is Try again and not Log in.
 //
@@ -73,7 +73,7 @@ func (v *unreachableView) content() fyne.CanvasObject {
 
 	settings := widget.NewButtonWithIcon("Open Settings", theme.SettingsIcon(), v.ui.openSettings)
 
-	signOut := widget.NewButtonWithIcon("Sign out", theme.LogoutIcon(), v.ui.signOut)
+	signOut := widget.NewButtonWithIcon("Log out", theme.LogoutIcon(), v.ui.signOut)
 	signOut.Importance = widget.LowImportance
 
 	body := container.NewVBox(

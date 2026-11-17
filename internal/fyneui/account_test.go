@@ -78,7 +78,7 @@ func TestListsCarryNoAddressBar(t *testing.T) {
 			t.Errorf("%s still carries the address bar", name)
 		}
 	}
-	if findButton(u.settings.built, "Connect") == nil {
+	if findButton(u.settings.serverSection.Content, "Connect") == nil {
 		t.Error("Settings has no Connect")
 	}
 }
@@ -113,7 +113,8 @@ func TestRefusedSessionReturnsToLogin(t *testing.T) {
 	}
 	u.client.Token = "dead-token"
 
-	library := u.accountBody.Objects[0]
+	u.showMain()
+	u.settle()
 
 	u.account.failedToLoad("https://eznit.example.com", &apiclient.APIError{Status: 401, Message: "Invalid token"})
 
@@ -123,11 +124,11 @@ func TestRefusedSessionReturnsToLogin(t *testing.T) {
 	if u.client.Token != "" {
 		t.Errorf("client token = %q, want it cleared", u.client.Token)
 	}
-	if findButton(u.accountBody.Objects[0], "Log in") == nil {
-		t.Error("My Account does not offer to sign in again")
+	if findButton(u.loginBody.Objects[0], "Log in") == nil || !u.screenShown(u.loginScreen) {
+		t.Error("the window does not put the login card on show")
 	}
-	if u.accountBody.Objects[0] == library {
-		t.Error("the library is still on screen after the session ended")
+	if u.hasWorkspaceTab() {
+		t.Error("Workspace is still in the bar after the session ended")
 	}
 }
 
@@ -157,7 +158,7 @@ func TestRefusedListingGoesToLogin(t *testing.T) {
 	// the races #333 recorded.
 	u.settle()
 
-	if findButton(u.accountBody.Objects[0], "Log in") == nil {
+	if findButton(u.loginBody.Objects[0], "Log in") == nil {
 		t.Fatal("a refused listing did not bring the login card back")
 	}
 
@@ -186,7 +187,7 @@ func TestUnreachableServerKeepsTheSession(t *testing.T) {
 		t.Errorf("client token = %q, want it kept", u.client.Token)
 	}
 
-	content := u.accountBody.Objects[0]
+	content := u.workspaceBody.Objects[0]
 	if findButton(content, "Try again") == nil {
 		t.Error("the not-connected panel has no Try again")
 	}
@@ -375,8 +376,8 @@ func TestSettingsRefusesABadTypedAddress(t *testing.T) {
 		t.Error("a bad address was saved")
 	}
 
-	if !strings.Contains(u.settings.status.Text, "http://") {
-		t.Errorf("status = %q, want the validation message", u.settings.status.Text)
+	if !strings.Contains(u.settings.status(), "http://") {
+		t.Errorf("status = %q, want the validation message", u.settings.status())
 	}
 }
 
@@ -439,8 +440,7 @@ func TestFileVisibilityAsksFirst(t *testing.T) {
 
 	u := newTestUI(t)
 	u.client = apiclient.New(server.URL).WithToken("the-token")
-	u.setAccountTab(u.account.content())
-	u.showAccount()
+	u.setWorkspace(u.account.content())
 
 	u.account.openFile(apiclient.File{ID: "9f1a", Name: "notes", Ext: "txt", Version: 1})
 	u.settle()

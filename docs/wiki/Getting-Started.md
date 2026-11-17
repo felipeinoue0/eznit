@@ -109,20 +109,23 @@ the source-checkout path — in a bundle it would try to build an image the
 archive does not contain.
 
 The bundle also carries `eznit-gui`. Run it **from inside the extracted folder** —
-the Local server tab looks for `eznit` beside the window (an archive from before the
+**Settings → Local server** looks for `eznit` beside the window (an archive from before the
 two binaries were merged still has `eznit-server`, and that works too). The first
 run is:
 
-1. **Server → Configuration → Create .env** (it copies the example), then set the
+1. **Settings → Local server → Configuration → Create .env** (it copies the example), then set the
    database password and **Save** — that writes `.env` and
    `secrets/db_password.txt`. This is the one step Start cannot invent: Postgres
    applies its password when it creates the volume;
-2. **Server → Start**: the tab brings up the database and applies the migrations
+2. **Settings → Local server → Start**: it brings up the database and applies the migrations
    through the folder's own Compose services when nothing answers, then starts
    the API. The Output tab shows the log; the status dot turns green;
-3. **Settings**: **Use this machine** is checked by default, so **Test**, then
-   **Connect**; then **Sign in** (top right) and create the first account — it
-   is the instance's admin.
+3. **Settings → Server**: **Use this machine** is checked by default, so
+   **Test**, then **Connect**; then **Log in** (top right) and create the first
+   account — it is the instance's admin. **Workspace** appears once you are in.
+
+To start over, **Settings → Reset** erases the local server's accounts, files and
+templates after a confirmation, and keeps `.env` and the password.
 
 If you prefer the terminal, `docker compose up -d db migrate` in that folder does
 the same thing, and **Start** only runs the migrations.

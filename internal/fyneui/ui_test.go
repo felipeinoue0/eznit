@@ -186,8 +186,8 @@ func TestConnectWithoutASessionShowsLogin(t *testing.T) {
 		t.Error("a connect without a session did not report a sign-out")
 	}
 
-	if findButton(u.accountBody.Objects[0], "Log in") == nil {
-		t.Error("My Account shows no login card after a connect without a session")
+	if findButton(u.loginBody.Objects[0], "Log in") == nil || u.hasWorkspaceTab() {
+		t.Error("a connect without a session left Workspace up or no login card ready")
 	}
 }
 
@@ -220,10 +220,10 @@ func TestForgetSessionLeavesACapturedClientAlone(t *testing.T) {
 	}
 }
 
-// A session belongs to My Account: that is the tab the login form replaces,
+// Log out is the bar's session button: it the login form replaces,
 // so that is where signing out belongs. It forgets the token and the catalogue,
 // and keeps the address and the host tokens.
-func TestSignOutLivesOnMyAccount(t *testing.T) {
+func TestLogOutIsTheBarsButton(t *testing.T) {
 	u := newTestUI(t)
 
 	if err := config.Set("token", "the-token"); err != nil {
@@ -236,19 +236,17 @@ func TestSignOutLivesOnMyAccount(t *testing.T) {
 	u.client.Token = "the-token"
 	u.account.templates = []templates.TemplateData{{Name: "a private starter"}}
 	u.account.ready = true
-	library := u.account.built
+	u.addWorkspaceTab()
+	u.tabs.Select(u.workspaceTab)
 
-	// Sign out is pressed on My Account, so that is the tab on show.
-	u.showAccount()
-
-	// Sign out is in the account screen's header, shown with a session.
-	u.updateAccountButton()
-	signOut := findButton(u.accountScreen, "Sign out")
-	if signOut == nil || signOut.Hidden {
-		t.Fatal("the account screen has no Sign out button")
+	// Log out is the bar's session button, named by the session.
+	u.updateSessionButton()
+	if u.sessionButton.Text != "Log out" {
+		t.Fatalf("session button = %q with a session, want Log out", u.sessionButton.Text)
 	}
 
-	test.Tap(signOut)
+	test.Tap(u.sessionButton)
+	u.settle()
 
 	if _, err := config.Value("token"); err == nil {
 		t.Error("the session token is still in the config file")
@@ -267,11 +265,15 @@ func TestSignOutLivesOnMyAccount(t *testing.T) {
 		t.Error("the account's templates are still loaded after signing out")
 	}
 
-	if u.accountBody.Objects[0] == library {
-		t.Error("My Account still shows the library")
+	if u.hasWorkspaceTab() || u.tabs.Selected() != u.webTab {
+		t.Error("Workspace is still in the bar after logging out")
 	}
 
-	if findButton(u.aboutContent(), "Sign out") != nil {
-		t.Error("the About tab still offers Sign out")
+	if u.screenShown(u.loginScreen) {
+		t.Error("a deliberate log-out put the login card in front of the tabs")
+	}
+
+	if findButton(u.aboutContent(), "Log out") != nil {
+		t.Error("About offers Log out")
 	}
 }

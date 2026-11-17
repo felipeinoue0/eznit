@@ -47,7 +47,7 @@ the same file. The window's **Settings** tab is the one place it is chosen: it
 names the address in use and where it came from — the `-api` flag,
 `GUI_API_URL`, the saved address, or this machine — and the sign-in card names
 it too, with a way to Settings. Settings is
-offering **This machine** (the port the Local server tab's configuration names) or any
+offering **This machine** (the port **Settings → Local server**'s configuration names) or any
 other address, with a health check before it is saved. A session belongs to the
 server that issued it: changing hosts signs you out, changing ports on one host
 does not. There is no `GUI_PORT`: the window has no HTTP server of its own.

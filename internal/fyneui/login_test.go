@@ -25,8 +25,8 @@ func newTestLogin(t *testing.T, signup bool) *loginView {
 
 	view := newLoginView(u, "", statusIdle)
 	view.signup = signup
-	u.setAccountTab(view.content())
-	u.showAccount()
+	u.setLoginCard(view.content())
+	u.showScreen(u.loginScreen)
 
 	return view
 }
@@ -44,7 +44,7 @@ func TestLoginHasOnePrimaryAction(t *testing.T) {
 			view := newTestLogin(t, signup)
 
 			primary := 0
-			for _, button := range allButtons(view.ui.accountBody.Objects[0]) {
+			for _, button := range allButtons(view.ui.loginBody.Objects[0]) {
 				if button.Importance == widget.HighImportance {
 					primary++
 				}
@@ -65,26 +65,26 @@ func TestLoginNamesTheServerAndLinksToSettings(t *testing.T) {
 	view.ui.address = apiChoice{url: "http://192.168.100.200:4000", source: "the address you entered"}
 
 	card := newLoginView(view.ui, "", statusIdle)
-	view.ui.setAccountTab(card.content())
+	view.ui.setLoginCard(card.content())
 
 	if card.server.Text != "http://192.168.100.200:4000" || !card.server.Selectable {
 		t.Errorf("server line = %q (selectable %v), want the current address", card.server.Text, card.server.Selectable)
 	}
 
 	for _, entry := range []string{"Connect", "Test"} {
-		if findButton(view.ui.accountBody.Objects[0], entry) != nil {
+		if findButton(view.ui.loginBody.Objects[0], entry) != nil {
 			t.Errorf("the card still has %q: the address belongs to Settings", entry)
 		}
 	}
 
-	change := findButton(view.ui.accountBody.Objects[0], "Change in Settings")
+	change := findButton(view.ui.loginBody.Objects[0], "Change in Settings")
 	if change == nil {
 		t.Fatal("the card has no way to Settings")
 	}
 
 	test.Tap(change)
 
-	if view.ui.accountShown() || view.ui.tabs.Selected() != view.ui.settingsTab {
+	if !view.ui.screenShown(view.ui.settingsScreen) || view.ui.settings.sections.Selected() != view.ui.settings.serverSection {
 		t.Error("Change in Settings did not open the Settings tab")
 	}
 }
@@ -162,7 +162,7 @@ func TestLoginCardFitsBothModes(t *testing.T) {
 
 			// The cell has to fit the tab as well, or the window clips the card
 			// and not one of its own rows.
-			if room := view.ui.accountBody.Objects[0].Size(); size.Height > room.Height {
+			if room := view.ui.loginBody.Objects[0].Size(); size.Height > room.Height {
 				t.Errorf("the card needs %.0f px of height but the tab gives it %.0f",
 					size.Height, room.Height)
 			}
@@ -176,7 +176,7 @@ func TestLoginCardFitsBothModes(t *testing.T) {
 func TestLoginShowsWhatSignupNeeds(t *testing.T) {
 	signup := newTestLogin(t, true)
 
-	if !holds(signup.ui.accountBody.Objects[0], signup.hint) {
+	if !holds(signup.ui.loginBody.Objects[0], signup.hint) {
 		t.Fatal("the signup form does not show what an account needs")
 	}
 
@@ -187,7 +187,7 @@ func TestLoginShowsWhatSignupNeeds(t *testing.T) {
 
 	login := newTestLogin(t, false)
 
-	if holds(login.ui.accountBody.Objects[0], login.hint) {
+	if holds(login.ui.loginBody.Objects[0], login.hint) {
 		t.Error("the log-in form shows the signup requirements")
 	}
 }

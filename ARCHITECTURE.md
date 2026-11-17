@@ -305,12 +305,12 @@ The GUI reads `GUI_API_URL` (the default server address), `-api` and
 `~/.eznit/config.json` beside the CLI's: `api_url`, `api_local`, `token` and
 `server_dir`. The address is resolved as `-api`, then `GUI_API_URL`, then the
 saved address, then this machine, and the last one is a **mode**: a window that
-has never chosen is local, so both tabs start on the server the Local server tab
+has never chosen is local, so the window starts on the server Settings → Local server
 would run. The **Settings** tab is the only place the address is chosen (#376):
 a **Use this machine** checkbox, the address field, **Test** (a
 `/v1/healthcheck` call that saves nothing), **Connect** (validate, then switch)
 and the source line. The sign-in card names the address and links to Settings;
-**Sign out** is in the account screen's header. Checked, the field follows the Local server tab's folder and is shut;
+**Log out** is the bar's session button. Checked, the field follows the local server's folder and is shut;
 unchecked, the saved or typed address is used. The choice is stored as
 `api_local`, and a flag or environment address arrives unchecked because an
 explicit override is not "this machine". `apiclient.ValidateBaseURL` and
@@ -332,13 +332,13 @@ and a status line under it reads as "signed in, nothing here", which is exactly
 what the window cannot know. `apiclient.ErrUnreachable` is what separates the two
 cases in Go.
 
-The session belongs to the account screen — opened by the **Sign in** / **My
-Account** button at the right end of the tab bar, closed with **Close**: it shows
-the login form when there is no token, and its header carries **Sign out**. A
-session that ends while the tabs are up brings the screen forward with the
-reason. Signing out removes
+The session is the bar's: **Log in** at its right end opens the login screen
+(full-window, with **Close**), and with a session the button reads **Log out**
+and the **Workspace** tab joins **Explore** (#379). A session that the API
+refuses brings the login screen forward with the reason; a deliberate log-out
+lands on Explore. Signing out removes
 only `token` — the address, the server folder and the git-host tokens stay — and
-drops the account's list and the Web list (whose owner names depend on the
+drops the account's list and the Explore list (whose owner names depend on the
 session). The About tab is the window's
 identity and its update controls; it holds nothing about a session.
 
@@ -348,7 +348,7 @@ side before it starts, so a request in flight never reads a token the UI is
 changing — sign-out and connect are writes to the window, not to the client.
 That is what lets the window's suite run under `-race` (see `make fyne_race`).
 
-The Local server tab reads the env file of `server_dir` — the folder the window was
+Settings → Local server reads the env file of `server_dir` — the folder the window was
 installed into unless another is chosen with **Browse…** or typed into the
 folder field and committed with **Use** — and starts `eznit serve` from it as a
 child process, with that file as its environment. A folder from an older release
@@ -369,16 +369,20 @@ a decision. "Reset to default" removes the key and returns to the folder
 controls refuse while the server runs, because the process belongs to the folder
 it was started from.
 
-The window's tabs are **Web**, **Local server**, **Settings** and **About**, with
-the account as a screen of its own (#373, #376). Web and My Account share one
+The window's tabs are **Explore** and, with a session, **Workspace**; **Log in /
+Log out**, **Settings** and **About** are buttons at the right end of the bar,
+and Settings and About open full-window with **Close** (#373, #376, #379).
+Settings lists its sections down the left: **Server** (the address), **Local
+server** (the panel described above) and **Reset** (below). Explore and
+Workspace share one
 shape (`internal/fyneui/entries.go`), inside a page margin: an All / Templates /
 Files dropdown, a `widget.List` of whole rows — an icon, the
 name over one line of facts, and **Download** at the right edge — and a detail
 page with **Back** that replaces the list when a row is opened. A row is
 selected as a whole; the old tables selected one cell at a time, and a cell said
-nothing the row did not. **Web** lists what anyone made public — the public
+nothing the row did not. **Explore** lists what anyone made public — the public
 templates of `GET /v1/templates` and `GET /v1/files/shared` — and needs no
-session. **My Account** lists the account's own files (`GET /v1/files`) and
+session. **Workspace** lists the account's own files (`GET /v1/files`) and
 templates (`GET /v1/templates/mine`), with **Upload file…** and **Publish
 template…**. A file's page shows its details and a preview of its first 32 KiB
 (`GET /v1/files/{id}/content`, read with a limit), with Download at the top and
@@ -395,6 +399,18 @@ than being copied into the client: the bundle format has one definition, shared
 with `template export`, so the window cannot write a file the CLI refuses to
 read. It is a data dependency — DTOs and the bundle — and `apiclient` returns
 those DTOs instead of a second set, for the same reason.
+
+**Settings → Reset** is `serverctl.Reset`: it erases the local server's data
+and keeps its configuration. It refuses a folder without `.env`, a database
+that is not on this machine, and a folder missing its compose file, runtime or
+secret — before anything runs. Otherwise it brings the folder's `db` up if
+nothing answers, then empties the database through the folder's own `migrate`
+service (`sh -c '… migrate … drop -f'`, the password read from the secret inside
+the container), and empties `API_UPLOADS` only when it resolves strictly inside
+the folder. It never runs `down --volumes`: that would take every named volume
+the compose file declares, not only the database's. The window stops a running
+server first, asks with a copyable confirmation, and logs out a session that
+belonged to the local server.
 
 Applying a template is `internal/templateapply`, a toolkit-free package the CLI
 and the window both call: `Files` turns a detail into writeable files (base64

@@ -16,7 +16,7 @@ import (
 	"github.com/fiwon123/eznit/internal/domain/templates"
 )
 
-// webView is the Web tab (#373): everything anyone on the server made public —
+// webView is Explore (#373): everything anyone on the server made public —
 // templates and files in one list. It needs no session: a person without an
 // account can still download what was shared. With one, each shared file also
 // names its owner.
@@ -39,7 +39,7 @@ type webView struct {
 
 // webIntro is the line above the list: what is here, and that an account is
 // optional.
-const webIntro = "Templates and files anyone on this server made public. No account is needed to download them; to share your own, open My Account."
+const webIntro = "Templates and files anyone on this server made public. No account is needed to download them; to share your own, log in and open Workspace."
 
 func newWebView(u *ui) *webView {
 	view := &webView{ui: u, status: newProse("")}
@@ -112,7 +112,7 @@ func (v *webView) reload() {
 				return
 			}
 
-			// A token the API refuses is the same story as on My Account: the
+			// A token the API refuses is the same story as on Workspace: the
 			// login card goes there, and this list loads again without the
 			// token — what is public needs none. Without a token there was no
 			// session to end, so a refusal is only an error; that also stops
@@ -121,11 +121,8 @@ func (v *webView) reload() {
 				v.forget()
 
 				if client.Token != "" {
+					// It reloads this list without the token, last.
 					v.ui.forgetSession(sessionEnded)
-
-					// Last, so nothing in this answer touches a widget
-					// while the new request's answer can.
-					v.reload()
 					return
 				}
 
@@ -162,7 +159,7 @@ func (v *webView) reload() {
 			case filesErr != nil:
 				v.setStatus("The shared files could not be loaded from "+address+": "+messageOf(filesErr), statusError)
 			case len(v.templates)+len(v.files) == 0:
-				v.setStatus("Nothing is public on "+address+" yet. Publish a template or share a file from My Account.", statusOK)
+				v.setStatus("Nothing is public on "+address+" yet. Publish a template or share a file from Workspace.", statusOK)
 			default:
 				v.setStatus(fmt.Sprintf("%d template(s) and %d file(s) on %s.", len(v.templates), len(v.files), address), statusOK)
 			}

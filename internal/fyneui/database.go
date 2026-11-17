@@ -40,8 +40,14 @@ type databaseProgress struct {
 }
 
 func (v *serverView) showDatabaseProgress(cancel context.CancelFunc) *databaseProgress {
-	message := widget.NewLabel("Starting or checking the database. " +
-		"The first start downloads the images, so it can take a few minutes.")
+	return v.showProgress("Preparing the database", "Starting or checking the database. "+
+		"The first start downloads the images, so it can take a few minutes.", cancel)
+}
+
+// showProgress is the step's modal: what is happening, the runtime's output as
+// it arrives, and Cancel.
+func (v *serverView) showProgress(title, explanation string, cancel context.CancelFunc) *databaseProgress {
+	message := widget.NewLabel(explanation)
 	message.Wrapping = fyne.TextWrapWord
 
 	text := widget.NewLabel("…")
@@ -65,7 +71,7 @@ func (v *serverView) showDatabaseProgress(cancel context.CancelFunc) *databasePr
 	actions := container.NewHBox(layout.NewSpacer(), cancelButton)
 	body := container.NewBorder(container.NewVBox(message, widget.NewSeparator()), actions, nil, nil, scroll)
 
-	modal := dialog.NewCustomWithoutButtons("Preparing the database", body, v.ui.window)
+	modal := dialog.NewCustomWithoutButtons(title, body, v.ui.window)
 	modal.Show()
 
 	progress.dialog = modal

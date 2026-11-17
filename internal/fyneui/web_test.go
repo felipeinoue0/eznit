@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"fyne.io/fyne/v2"
 	"fyne.io/fyne/v2/test"
 
 	"github.com/fiwon123/eznit/internal/apiclient"
@@ -158,7 +159,7 @@ func TestWebTabEmptySaysHowToShare(t *testing.T) {
 	u.web.reload()
 	u.settle()
 
-	if !strings.Contains(u.web.status.Text, "from My Account") {
+	if !strings.Contains(u.web.status.Text, "from Workspace") {
 		t.Errorf("status = %q, want it to say how something becomes public", u.web.status.Text)
 	}
 }
@@ -173,7 +174,7 @@ func TestWebTabRefusedTokenEndsTheSession(t *testing.T) {
 	u.web.reload()
 	u.settle()
 
-	if findButton(u.accountBody.Objects[0], "Log in") == nil {
+	if findButton(u.loginBody.Objects[0], "Log in") == nil {
 		t.Fatal("a refused token did not bring the login card back")
 	}
 	if u.client.Token != "" {
@@ -188,40 +189,74 @@ func TestWebTabRefusedTokenEndsTheSession(t *testing.T) {
 	}
 }
 
-// The tabs are Web first, then Local server, Settings and About; My Account is
-// a button at the far right of the bar, named by the session (#376).
+// Explore is the first tab; Workspace joins it only with a session. The right
+// end of the bar is Log in (Log out with a session), Settings and About, each
+// opening a full-window screen with Close (#379).
 func TestTabOrder(t *testing.T) {
 	u := newTestUI(t)
 
-	var titles []string
-	for _, item := range u.tabs.Items {
-		titles = append(titles, item.Text)
+	titles := func() string {
+		var names []string
+		for _, item := range u.tabs.Items {
+			names = append(names, item.Text)
+		}
+		return strings.Join(names, ",")
 	}
 
-	if got := strings.Join(titles, ","); got != "Web,Settings,About" {
-		t.Errorf("tabs = %q, want Web, Settings, About (no Local server in the test window)", got)
+	if got := titles(); got != "Explore" {
+		t.Errorf("tabs without a session = %q, want Explore alone", got)
+	}
+	if u.tabs.Selected() != u.webTab {
+		t.Error("the window does not open on Explore")
+	}
+	if u.sessionButton.Text != "Log in" {
+		t.Errorf("session button = %q without a session, want Log in", u.sessionButton.Text)
 	}
 
-	if u.accountButton.Text != "Sign in" {
-		t.Errorf("account button = %q without a session, want Sign in", u.accountButton.Text)
+	test.Tap(u.sessionButton)
+	if !u.screenShown(u.loginScreen) {
+		t.Fatal("Log in did not open the login screen")
+	}
+	test.Tap(findButton(u.loginScreen, "Close"))
+	if u.screenShown(u.loginScreen) {
+		t.Error("Close did not return to the tabs")
 	}
 
 	u.client = u.client.WithToken("the-token")
-	u.updateAccountButton()
-	if u.accountButton.Text != "My Account" {
-		t.Errorf("account button = %q with a session, want My Account", u.accountButton.Text)
+	u.openWorkspace()
+	u.settle()
+
+	if got := titles(); got != "Explore,Workspace" {
+		t.Errorf("tabs with a session = %q, want Explore,Workspace", got)
+	}
+	if u.tabs.Selected() != u.workspaceTab {
+		t.Error("a login does not land on Workspace")
+	}
+	if u.sessionButton.Text != "Log out" {
+		t.Errorf("session button = %q with a session, want Log out", u.sessionButton.Text)
 	}
 
-	test.Tap(u.accountButton)
-	if !u.accountShown() {
-		t.Fatal("the account button did not open the account screen")
+	for _, screen := range []struct {
+		caption string
+		want    fyne.CanvasObject
+	}{
+		{"Settings", u.settingsScreen},
+		{"About", u.aboutScreen},
+	} {
+		button := findButton(u.mainScreen, screen.caption)
+		if button == nil {
+			t.Fatalf("the bar has no %s", screen.caption)
+		}
+		test.Tap(button)
+		if !u.screenShown(screen.want) {
+			t.Errorf("%s did not open its screen", screen.caption)
+		}
+		u.showTabs()
 	}
 
-	test.Tap(findButton(u.accountScreen, "Close"))
-	if u.accountShown() {
-		t.Error("Close did not return to the tabs")
+	test.Tap(u.sessionButton)
+	if got := titles(); got != "Explore" || u.sessionButton.Text != "Log in" {
+		t.Errorf("after Log out: tabs %q, button %q", got, u.sessionButton.Text)
 	}
-	if u.tabs.Selected() != u.webTab {
-		t.Error("the window does not open on the Web tab")
-	}
+	u.settle()
 }
