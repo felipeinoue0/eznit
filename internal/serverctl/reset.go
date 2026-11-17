@@ -102,8 +102,13 @@ func (p preparer) reset() (ResetResult, error) {
 	environ := append(os.Environ(), env.ChildEnv()...)
 
 	// The database has to answer to be emptied: bring the folder's own up if
-	// it is not running.
-	if !p.reach(address.host, address.port, p.probe) {
+	// it is not running. One that answers must be the folder's own — a drop
+	// through migrate would otherwise start a second `db` on a taken port.
+	if p.reach(address.host, address.port, p.probe) {
+		if err := p.ownsAnsweredDatabase(compose, environ, address); err != nil {
+			return ResetResult{}, err
+		}
+	} else {
 		if err := compose.run(p.ctx, p.dir, environ, p.out, "up", "-d", "db"); err != nil {
 			return ResetResult{}, err
 		}

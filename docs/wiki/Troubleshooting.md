@@ -102,6 +102,13 @@ The step that runs before **Start** names the piece that is missing:
   `podman-compose`), or start a PostgreSQL yourself.
 - *no `secrets/db_password.txt`* — set the database password on **Configuration**
   and save; Postgres bakes its password in when it creates the volume.
+- *another database already answers on this folder's DB_HOST and DB_PORT* —
+  something else holds the port, most often another eznit stack (a checkout's
+  `make dev-up` publishes 5432). Stop it (`make dev-down` there), or set a
+  different `DB_PORT` (for example 5433) in **Configuration**. **Reset** refuses
+  the same case and erases nothing. Before v0.37.2 both failed instead with
+  `docker compose run --rm migrate: exit status 1`, because Compose could not
+  start the folder's own `db` on the taken port.
 - *did not answer after it was started* — press **Start** again; a first pull of
   the images and a slow disk can outlast the 30-second wait. The database's own
   log (`docker compose logs db`) says the rest. The full output is in the dialog,
