@@ -111,6 +111,9 @@ func newPreparer(t *testing.T, dir string, answers func(call int) bool) (*prepar
 			return answers(*calls)
 		},
 		look: exec.LookPath,
+		// The folder's own `db` is the one answering unless a test says
+		// otherwise; TestComposeRunning covers the real question.
+		running: func(composeRuntime, []string) (bool, error) { return true, nil },
 	}
 
 	return p, calls, output
@@ -605,5 +608,102 @@ func TestPortFree(t *testing.T) {
 
 	if err := PortFree(dir); err == nil {
 		t.Error("PortFree() = nil, want the busy port reported")
+	}
+}
+
+// notRunning is the folder's `db` reported as down: whatever answers on the
+// port belongs to something else.
+func notRunning(composeRuntime, []string) (bool, error) { return false, nil }
+
+// #385: the port answers, but the folder's own `db` is not running — another
+// stack holds it. Start refuses before running anything, instead of letting
+// `compose run migrate` start a second `db` that cannot bind the port.
+func TestPrepareRefusesADatabaseTheFolderDoesNotOwn(t *testing.T) {
+	dir := bundleFor(t, true, true)
+	logFile := fakeRuntime(t, "docker", 0)
+
+	p, _, _ := newPreparer(t, dir, func(int) bool { return true })
+	p.running = notRunning
+
+	result, err := p.run()
+	if !errors.Is(err, ErrPortTaken) {
+		t.Fatalf("Prepare() error = %v, want ErrPortTaken", err)
+	}
+	if !strings.Contains(err.Error(), "127.0.0.1:55432") {
+		t.Errorf("Prepare() error = %q, want it to name the address", err)
+	}
+	if result.Started || result.Migrated {
+		t.Errorf("Prepare() = %+v, want nothing done", result)
+	}
+	if got := commands(t, logFile); len(got) != 0 {
+		t.Errorf("a refused start still ran %q", got)
+	}
+}
+
+// A runtime that cannot say what is running is not held against the folder:
+// the migrations run, as they did before the question was asked.
+func TestPrepareMigratesWhenTheRuntimeCannotSay(t *testing.T) {
+	dir := bundleFor(t, true, true)
+	logFile := fakeRuntime(t, "docker", 0)
+
+	p, _, _ := newPreparer(t, dir, func(int) bool { return true })
+	p.running = func(composeRuntime, []string) (bool, error) { return false, errors.New("no ps") }
+
+	if result, err := p.run(); err != nil || !result.Migrated {
+		t.Fatalf("Prepare() = %+v, %v, want the migrations run", result, err)
+	}
+	if got := commands(t, logFile); len(got) != 1 || got[0] != "compose run --rm migrate" {
+		t.Errorf("the runtime was asked for %q, want one migration run", got)
+	}
+}
+
+// quietRuntime is a fake runtime that prints exactly what it is given — the
+// output of `compose ps -q db` — and records nothing.
+func quietRuntime(t *testing.T, printed string, exit int) {
+	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("the fake runtime is a shell script; Windows cannot run it")
+	}
+
+	dir := t.TempDir()
+	script := "#!/bin/sh\nprintf '%s' '" + printed + "'\nexit " + strconv.Itoa(exit) + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "docker"), []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Setenv("PATH", dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+}
+
+// TestComposeRunning is the real question behind #385: a container id means
+// the folder's `db` is up, no output means it is not, and a failed `ps` is an
+// error rather than a guess.
+func TestComposeRunning(t *testing.T) {
+	tests := []struct {
+		name    string
+		printed string
+		exit    int
+		want    bool
+		wantErr bool
+	}{
+		{"running", "3f2a9c1e\n", 0, true, false},
+		{"not running", "", 0, false, false},
+		{"ps fails", "", 1, false, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			quietRuntime(t, tt.printed, tt.exit)
+
+			p := preparer{ctx: context.Background(), dir: t.TempDir(), out: io.Discard}
+
+			got, err := p.composeRunning(composeRuntime{command: "docker", prefix: []string{"compose"}}, os.Environ())
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("composeRunning() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if got != tt.want {
+				t.Errorf("composeRunning() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

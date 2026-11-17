@@ -90,8 +90,11 @@ func (v *serverView) afterReset(folder string, result serverctl.ResetResult, err
 
 	if err != nil {
 		message := "The reset did not finish: " + err.Error()
-		if errors.Is(err, context.Canceled) {
+		switch {
+		case errors.Is(err, context.Canceled):
 			message = "The reset was cancelled."
+		case errors.Is(err, serverctl.ErrPortTaken):
+			message = "The reset did not run, and nothing was erased. " + portTakenNote
 		}
 		if result.Dropped {
 			message += " The database was emptied already."

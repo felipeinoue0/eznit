@@ -192,3 +192,24 @@ func TestResetReportsAFailedDrop(t *testing.T) {
 		t.Error("the uploads were erased although the database was not")
 	}
 }
+
+// #385: a reset whose address answers from another stack's database erases
+// nothing — not that database, and not the uploads either.
+func TestResetRefusesADatabaseTheFolderDoesNotOwn(t *testing.T) {
+	dir := bundleFor(t, true, true)
+	file := writeUploads(t, dir, "./uploads", filepath.Join(dir, "uploads"))
+	logFile := fakeRuntime(t, "docker", 0)
+
+	p, _, _ := newPreparer(t, dir, func(int) bool { return true })
+	p.running = notRunning
+
+	if _, err := p.reset(); !errors.Is(err, ErrPortTaken) {
+		t.Fatalf("reset() = %v, want ErrPortTaken", err)
+	}
+	if got := commands(t, logFile); len(got) != 0 {
+		t.Errorf("a refused reset still ran %q", got)
+	}
+	if _, err := os.Stat(file); err != nil {
+		t.Error("the uploads were erased although the reset was refused")
+	}
+}

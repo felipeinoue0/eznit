@@ -5,6 +5,7 @@ package fyneui
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"os"
@@ -1452,6 +1453,7 @@ func TestServerViewAfterPrepareRefusesWithoutADatabase(t *testing.T) {
 		{"no runtime", serverctl.ErrNoRuntime, "Docker or Podman"},
 		{"no password file", serverctl.ErrNoPassword, "Configuration"},
 		{"never answered", serverctl.ErrNoAnswer, "press Start again"},
+		{"another database on the port", fmt.Errorf("%w (127.0.0.1:5432)", serverctl.ErrPortTaken), "different DB_PORT"},
 	}
 
 	for _, tt := range tests {
@@ -1834,6 +1836,25 @@ func TestResetReportsAFailure(t *testing.T) {
 
 	if !strings.Contains(view.note.Text, "did not finish") || !strings.Contains(view.note.Text, "emptied already") {
 		t.Errorf("note = %q, want the failure and what was done", view.note.Text)
+	}
+}
+
+// #385: a reset refused because another database holds the port says that
+// nothing was erased, and how to free the port.
+func TestResetReportsAPortTakenByAnotherDatabase(t *testing.T) {
+	view := newTestServerView(t, bundleDir(t, "API_PORT=\"4000\"\n"))
+
+	view.wipe = func(context.Context, string, io.Writer) (serverctl.ResetResult, error) {
+		return serverctl.ResetResult{}, fmt.Errorf("%w (127.0.0.1:5432)", serverctl.ErrPortTaken)
+	}
+
+	view.resetData()
+	waitForStep(t, view)
+
+	for _, want := range []string{"nothing was erased", "different DB_PORT"} {
+		if !strings.Contains(view.note.Text, want) {
+			t.Errorf("note = %q, want it to say %q", view.note.Text, want)
+		}
 	}
 }
 
