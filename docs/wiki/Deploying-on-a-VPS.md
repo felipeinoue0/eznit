@@ -33,6 +33,7 @@ docker compose down           # stop; the data is kept (never add -v)
 
 # update
 make vps-update               # back up, then the newest release
+make vps-autoupdate           # or: let the server do it every hour
 ```
 
 The rest of this page explains what those commands do.
@@ -249,6 +250,67 @@ of downtime.
 > **Never run a down migration on a deployment you care about.** A down migration
 > drops columns and tables. To go back to an older release, restore the backup
 > `vps-update` took before the update.
+
+## 🤖 Automatic updates
+
+The server can install each new release by itself:
+
+```sh
+make vps-autoupdate             # on: checks once an hour
+make vps-autoupdate-status      # on or off, paused or not, the last log lines
+make vps-autoupdate-off         # off
+```
+
+It **pulls**: every hour the VPS runs `git fetch` against the public repository,
+and when a newer release exists it runs `make vps-update`. Nothing about the server
+is stored on GitHub (no address, no SSH key, no workflow, no secret), and nothing
+new can connect to the server.
+
+```mermaid
+flowchart TD
+    T["⏰ Every hour (cron)"] --> F["🏷️ Fetch the release tags"]
+    F --> N{"Newer release?"}
+    N -->|"no"| Z["😴 Log 'up to date'"]
+    N -->|"yes"| U["💾 Backup, then 🔁 make vps-update"]
+    U --> H{"API answers?"}
+    H -->|"yes"| OK["✅ Log 'updated'"]
+    U -.->|"fails"| P["⏸️ Pause and wait for you"]
+    H -.->|"no"| P
+
+    classDef step fill:#dbeafe,stroke:#2563eb,color:#1e3a8a
+    classDef ok fill:#dcfce7,stroke:#16a34a,color:#14532d
+    classDef stop fill:#fee2e2,stroke:#dc2626,color:#7f1d1d
+    class T,F,N,U,H step
+    class Z,OK ok
+    class P stop
+```
+
+| Rule | Why |
+| --- | --- |
+| 🏷️ Only **release tags** (`vX.Y.Z`) are installed, never a branch | a tag has passed the release CI |
+| 💾 A backup comes first, and a failed backup stops it | every update can be undone with `make restore` |
+| 🔒 One run at a time | a slow build never overlaps the next check |
+| ⏸️ **Any failure pauses it** until you look | a broken release is not retried every hour |
+| ↩️ **No automatic rollback** | going back is a restore, and a restore replaces data. You decide. |
+
+Everything is written to `backups/auto-update.log`.
+
+### ⏸️ When it paused
+
+```sh
+make vps-autoupdate-status          # what failed, and the log
+docker compose ps -a                # which container is not running
+docker compose logs --tail 50 api   # why
+```
+
+| What you find | What to do |
+| --- | --- |
+| a temporary problem (disk full, Docker restarted mid-build) | fix it, `make vps-update` to finish, then `make vps-autoupdate-resume` |
+| the new release itself is broken | `make restore BACKUP=backups/<the one taken before the update>`, then report it. Keep it paused until a fixed release exists. |
+
+> [!NOTE]
+> A network error while fetching does **not** pause it. That run is skipped and the
+> next hour tries again.
 
 ## 💾 Backups
 
