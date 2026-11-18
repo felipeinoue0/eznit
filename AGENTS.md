@@ -177,6 +177,7 @@ make dev-up    # the dev loop: UI :5173 (Vite, hot reload) + API :4000
 make up        # build + run the product: API :4000, web UI :5173, db, migrations
 make vps-init DOMAIN=<host> [PROXY=traefik|none]  # once on a VPS: random db password, loopback ports, HTTPS
 make vps-update [TAG=vX.Y.Z] # on a VPS: back up, check out a release, rebuild; data kept
+make vps-autoupdate          # on a VPS: hourly cron pulls and installs each new release (pauses on failure)
 ```
 
 The quickest way to see the product needs no host toolchain beyond Docker:

@@ -367,7 +367,7 @@ migrate_force:
 ## Docker
 unexport
 
-.PHONY: docker_up docker_down docker_up_all docker_down_v up preflight-ports backup restore vps-init vps-update
+.PHONY: docker_up docker_down docker_up_all docker_down_v up preflight-ports backup restore vps-init vps-update vps-autoupdate vps-autoupdate-off vps-autoupdate-status vps-autoupdate-resume
 
 # Which entry point is starting. Set by the target that depends on
 # `preflight-ports`, and only read there.
@@ -452,6 +452,21 @@ vps-init: setup ## Prepare this checkout as a public HTTPS server: DOMAIN=<host 
 
 vps-update: ## Back up, then move to the newest release (or TAG=vX.Y.Z) and rebuild
 	@sh scripts/vps-update.sh "$(TAG)"
+
+# Automatic updates (#404): the server pulls new releases itself, hourly, through
+# cron. Nothing about the server goes to GitHub. A failure pauses it until
+# someone looks (status) and resumes it.
+vps-autoupdate: ## Turn on automatic updates: hourly, installs each new release (backup first)
+	@sh scripts/vps-autoupdate.sh install
+
+vps-autoupdate-off: ## Turn off automatic updates
+	@sh scripts/vps-autoupdate.sh remove
+
+vps-autoupdate-status: ## Show whether automatic updates are on, paused, and the last log lines
+	@sh scripts/vps-autoupdate.sh status
+
+vps-autoupdate-resume: ## Resume automatic updates after a failure was checked
+	@sh scripts/vps-autoupdate.sh resume
 
 ## Development
 .PHONY: run_api run_cli run_jq
