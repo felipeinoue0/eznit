@@ -216,6 +216,9 @@ services:
     build:
       context: ./web
       dockerfile: Dockerfile
+      args:
+        # Shown on the About page; `make vps-update` keeps it in .env.
+        VERSION: ${VERSION:-dev}
     ports:
       # WEB_BIND=127.0.0.1 behind a reverse proxy, as API_BIND above.
       - "${WEB_BIND:-0.0.0.0}:${WEB_PORT:-5173}:80"

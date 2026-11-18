@@ -109,6 +109,9 @@ set_env API_BIND 127.0.0.1
 set_env WEB_BIND 127.0.0.1
 set_env TRUST_PROXY true
 set_env DOMAIN "$DOMAIN"
+# The release the images are built with, shown on the web UI's About page (#410).
+release="$(git describe --tags --exact-match HEAD 2>/dev/null || true)"
+[ -z "$release" ] || set_env VERSION "$release"
 
 # The `https` profile is the built-in Caddy: on for PROXY=caddy, off otherwise.
 profiles="$(get_env COMPOSE_PROFILES)"

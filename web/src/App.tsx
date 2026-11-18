@@ -8,6 +8,7 @@ import type { IconName } from "./components/Icon";
 import Logo from "./components/Logo";
 import ThemeToggle from "./components/ThemeToggle";
 import { ConfirmProvider, ToastProvider } from "./components/ui";
+import About from "./pages/About";
 import Commands from "./pages/Commands";
 import Explore from "./pages/Explore";
 import Files from "./pages/Files";
@@ -99,6 +100,7 @@ function Shell() {
           <NavSection title="Use it">
             <NavItem to="/local" icon="rocket" label="Run locally" />
             <NavItem to="/settings" icon="settings" label="Settings" />
+            <NavItem to="/about" icon="info" label="About" />
           </NavSection>
         </nav>
 
@@ -175,6 +177,7 @@ function Shell() {
             />
             <Route path="/local" element={<RunLocally />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/about" element={<About />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </main>
