@@ -129,7 +129,7 @@
         line="$minute * * * * cd '$ROOT' && sh scripts/vps-autoupdate.sh run $TAG_MARK"
         { cron_lines | grep -vF "$TAG_MARK" || true; printf '%s\n' "$line"; } | crontab -
         mkdir -p "$BACKUPS"
-        say "on: every hour at minute $minute, this server checks for a new release and installs it"
+        say "on: checks every hour at :$(printf '%02d' "$minute") for a new release and installs it — first check at $(next_check "$minute")"
         say "log: $ROOT/$LOG    status: make vps-autoupdate-status    off: make vps-autoupdate-off"
     }
 
@@ -143,9 +143,35 @@
         fi
     }
 
+    # next_check MINUTE prints when cron next runs an hourly entry at MINUTE,
+    # from the server clock (cron uses the same one): "14:09 UTC (in 23 min)".
+    # The current minute counts as gone, since cron starts at its first second.
+    next_check() {
+        now_h=$(date +%H | sed 's/^0//')
+        now_m=$(date +%M | sed 's/^0//')
+        at=$1
+        if [ "${now_m:-0}" -lt "$at" ]; then
+            hour=${now_h:-0}
+            wait=$((at - ${now_m:-0}))
+        else
+            hour=$(((${now_h:-0} + 1) % 24))
+            wait=$((60 - ${now_m:-0} + at))
+        fi
+        printf '%02d:%02d %s (in %d min)' "$hour" "$at" "$(date +%Z)" "$wait"
+    }
+
     status() {
         if command -v crontab >/dev/null 2>&1 && cron_lines | grep -qF "$TAG_MARK"; then
-            say "on: $(cron_lines | grep -F "$TAG_MARK" | cut -d' ' -f1-5) (minute hour day month weekday)"
+            at=$(cron_lines | grep -F "$TAG_MARK" | head -n 1 | cut -d' ' -f1)
+            # "09" would read as octal in shell arithmetic and printf.
+            case "$at" in
+                *[!0-9]* | '') ;;
+                *) at=$(printf '%s' "$at" | sed 's/^0*//'); at=${at:-0} ;;
+            esac
+            case "$at" in
+                '' | *[!0-9]*) say "on: $(cron_lines | grep -F "$TAG_MARK" | cut -d' ' -f1-5) (edited by hand)" ;;
+                *) say "on: checks every hour at :$(printf '%02d' "$at") — next check at $(next_check "$at")" ;;
+            esac
         else
             say "off (make vps-autoupdate turns it on)"
         fi
