@@ -19,6 +19,9 @@ ARG GO_VERSION=1.27.4
 ARG ALPINE_VERSION=3.23
 
 FROM node:${NODE_VERSION}-bookworm-slim AS web
+# The release the embedded UI's About page shows (#410).
+ARG VERSION=dev
+ENV VITE_APP_VERSION=${VERSION}
 WORKDIR /src/web
 # Copy the manifests first: the dependency install then survives a change to
 # the source, and only a lockfile change invalidates that layer.

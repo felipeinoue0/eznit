@@ -66,8 +66,25 @@
     sh scripts/backup.sh "$BACKUPS" || fail "the backup failed, so nothing was updated"
 
     git -c advice.detachedHead=false checkout --quiet "$TAG"
+
+    # VERSION in .env is what the images are built with: the web UI's About page
+    # shows it (#410), and a later `docker compose up -d --build` keeps it.
+    tmp=".env.vps-update.tmp"
+    (
+        umask 077
+        if grep -q '^VERSION=' .env; then
+            awk -v v="$TAG" 'index($0, "VERSION=") == 1 { print "VERSION=" v; next } { print }' .env >"$tmp"
+        else
+            cp .env "$tmp"
+            [ ! -s "$tmp" ] || [ -z "$(tail -c 1 "$tmp")" ] || printf '\n' >>"$tmp"
+            printf 'VERSION=%s\n' "$TAG" >>"$tmp"
+        fi
+    )
+    chmod 600 "$tmp"
+    mv "$tmp" .env
+
     say "rebuilding $TAG (the data volumes are kept)"
-    docker compose up -d --build
+    VERSION="$TAG" docker compose up -d --build
 
     say "done — running $TAG"
     docker compose ps
