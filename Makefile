@@ -71,8 +71,10 @@ ENV_EXAMPLE := ./.env.example
 VERSION := $(shell git describe --tags --always)
 
 # The desktop app is built for the host, with cgo: it is not a cross-compile.
-HOST_GOOS := $(shell go env GOOS)
-HOST_GOARCH := $(shell go env GOARCH)
+# Quiet when Go is absent: a VPS runs the Compose targets without it, and the
+# GUI targets that read these fail on their own without Go (#407).
+HOST_GOOS := $(shell go env GOOS 2>/dev/null)
+HOST_GOARCH := $(shell go env GOARCH 2>/dev/null)
 
 # The Fyne window is a GUI-subsystem program on Windows; without -H windowsgui
 # a double-click opens a console behind it.
