@@ -18,6 +18,10 @@ ARG NODE_VERSION=24.22.1
 ARG NGINX_VERSION=alpine
 
 FROM node:${NODE_VERSION}-bookworm-slim AS build
+# The release the About page shows (#410). Compose passes VERSION, which
+# `make vps-update` keeps in .env; without it the page says "dev".
+ARG VERSION=dev
+ENV VITE_APP_VERSION=${VERSION}
 WORKDIR /src/web
 # The manifests first: the dependency install then survives a source change,
 # and only a lockfile change invalidates that layer.

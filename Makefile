@@ -635,7 +635,7 @@ web_build: ## Build the web UI into web/dist
 		echo "[web] node_modules is missing — installing the pinned dependencies..."; \
 		(cd $(WEB_FOLDER) && npm ci); \
 	fi; \
-	cd $(WEB_FOLDER) && npm run build && touch dist/.gitkeep
+	cd $(WEB_FOLDER) && VITE_APP_VERSION="$(VERSION)" npm run build && touch dist/.gitkeep
 
 web_dev: ## Run the web UI dev server on http://localhost:5173
 	@if ! command -v node >/dev/null 2>&1; then \
